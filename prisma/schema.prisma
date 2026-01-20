@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Depot {
+  id              Int         @id @default(autoincrement())
+  name            String      @db.VarChar(255)
+  address         String?     @db.Text
+  contactPerson   String?     @db.VarChar(255)
+  phone           String?     @db.VarChar(50)
+  province        String?     @db.VarChar(100)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  granaries       Granary[]
+  users           UserDepotAssociation[]
+}
+
+model Granary {
+  id                  Int             @id @default(autoincrement())
+  depotId             Int
+  name                String          @db.VarChar(255)
+  lastCollectedAt     DateTime?
+  collectionStatus    Int             @default(0)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  depot               Depot           @relation(fields: [depotId], references: [id], onDelete: Cascade)
+  config              GranaryConfig?
+  info                GranaryInfo?
+  data                GranaryData[]
+}
+
+model GranaryConfig {
+  id                    Int         @id @default(autoincrement())
+  granaryId             Int         @unique
+  extensionNumber       Int?
+  tempCollectorCount    Int?
+  thCollectorCount      Int?
+  startIndex            Int?
+  endIndex              Int?
+  thIndex               Int?
+  cableCount            Int?
+  cablePointCount       Int?
+  totalCollectorCount   Int?
+  mqttTopicSub          String?     @db.VarChar(255)
+  mqttTopicPub          String?     @db.VarChar(255)
+  collectionDevice      Int?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  granary               Granary     @relation(fields: [granaryId], references: [id], onDelete: Cascade)
+}
+
+model GranaryInfo {
+  id              Int         @id @default(autoincrement())
+  granaryId       Int         @unique
+  manager         String?     @db.VarChar(255)
+  designCapacity  Float?
+  actualCapacity  Float?
+  storageNature   String?     @db.VarChar(100)
+  variety         String?     @db.VarChar(255)
+  entryTime       DateTime?
+  origin          String?     @db.VarChar(255)
+  grade           String?     @db.VarChar(100)
+  roughRiceYield  Float?
+  moisture        Float?
+  remark          String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  granary         Granary     @relation(fields: [granaryId], references: [id], onDelete: Cascade)
+}
+
+model GranaryData {
+  id                Int         @id @default(autoincrement())
+  granaryId         Int
+  collectedAt       DateTime    @default(now())
+  sequenceNumber    Int?
+  temperatureValues Json?
+  humidityValues    Float?
+  createdAt         DateTime    @default(now())
+
+  granary           Granary     @relation(fields: [granaryId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id              Int         @id @default(autoincrement())
+  username        String      @db.VarChar(255) @unique
+  hashedPassword  String      @db.VarChar(255)
+  email           String?     @db.VarChar(255) @unique
+  role            Int         @default(0)
+  fullName        String?     @db.VarChar(255)
+  phone           String?     @db.VarChar(50)
+  isActive        Boolean     @default(false)
+  isApproved      Boolean     @default(false)
+  approvedBy      Int?
+  approvedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  associations    UserDepotAssociation[]
+  approvedUsers   User[]     @relation("ApprovedUsers")
+  approver        User?      @relation("ApprovedUsers", fields: [approvedBy], references: [id])
+}
+
+model UserDepotAssociation {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  depotId   Int
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  depot     Depot    @relation(fields: [depotId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, depotId])
+}
