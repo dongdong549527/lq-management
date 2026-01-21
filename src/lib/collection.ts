@@ -16,6 +16,7 @@ export interface CollectionResult {
 
 // Helper to parse data based on protocol
 const parseProtocolData = (data: Uint8Array): CollectionResult | null => {
+  console.log("Parsing data:", Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' '));
   // Protocol Header: 2C 5A A5
   // We need at least header (3) + extension (1) + collector (1) + some data
   if (data.length < 5) return null;
@@ -150,6 +151,7 @@ export const collectFromSerial = async (extensionNumber: number): Promise<Collec
     // Command: 05 55 AA [Extension] AA 55
     // Extension should be hex.
     const command = new Uint8Array([0x05, 0x55, 0xAA, extensionNumber, 0xAA, 0x55]);
+    console.log("Sending command:", Array.from(command).map(b => b.toString(16).padStart(2, '0')).join(' '));
     await writer.write(command);
     writer.releaseLock();
 
@@ -160,8 +162,12 @@ export const collectFromSerial = async (extensionNumber: number): Promise<Collec
     try {
         while (Date.now() - startTime < 3000) { // 3 seconds timeout
             const { value, done } = await reader.read();
-            if (done) break;
+            if (done) {
+                console.log("Reader done");
+                break;
+            }
             if (value) {
+                console.log("Received chunk:", Array.from(value).map(b => b.toString(16).padStart(2, '0')).join(' '));
                 const newData = new Uint8Array(accumulatedData.length + value.length);
                 newData.set(accumulatedData);
                 newData.set(value, accumulatedData.length);
@@ -170,10 +176,12 @@ export const collectFromSerial = async (extensionNumber: number): Promise<Collec
                 // Try parsing
                 const result = parseProtocolData(accumulatedData);
                 if (result && Object.keys(result.temperatureValues).length > 0) {
+                    console.log("Parsing success:", result);
                     return result;
                 }
             }
         }
+        console.log("Timeout reached, accumulated data:", Array.from(accumulatedData).map(b => b.toString(16).padStart(2, '0')).join(' '));
     } finally {
         reader.releaseLock();
         await port.close();
