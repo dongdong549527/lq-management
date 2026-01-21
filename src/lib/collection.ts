@@ -80,23 +80,6 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
   if (collectorId === 0x01) {
       // Temp packet
       // Fixed length 45 bytes as per instruction
-      const expectedLength = 46; // Header(3) + Ext(1) + Col(1) + Temp(35) + Comp(5) + BB(1) = 46.
-      // Wait, user said "Data length is 45 bytes".
-      // If user implies TOTAL packet length is 45, then BB is at 44.
-      // Let's verify: 3+1+1+35+5 = 45.
-      // If BB is extra, it's 46.
-      // If user says "45 bytes", maybe they mean the *payload* or *total*?
-      // "不应该通过BB来判断 而是通过包头2c来判断 数据长度为45个字节"
-      // "Should not judge by BB, but by header 2c. Data length is 45 bytes."
-      // Let's try to consume 45 bytes.
-      // If we consume 45, the next byte should be start of next packet (or BB if 46?).
-      // If I assume 45, and it's actually 46, I leave 1 byte (BB) in buffer.
-      // Next scan finds BB as header? No. 2C is header.
-      // So if I consume 45, and BB is at 45 (index), it remains.
-      // Then next scan starts at BB. Not 2C. Discards BB. Finds next 2C.
-      // So 45 seems safe if actual is 46.
-      // But if actual is 45 (no BB?), then 45 is correct.
-      // Let's go with 45 as requested.
       
       if (packetStart.length < 45) {
           console.log("Packet 01 too short", packetStart.length);
@@ -114,9 +97,6 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
           if (tempIndex >= tempData.length) break;
           
           const rawTemp = tempData[tempIndex];
-          // If rawTemp is 0 (unconnected?), skip or set as 0?
-          // Protocol doesn't say.
-          
           const byteIndex = Math.floor(tempIndex / 8);
           const bitIndex = 7 - (tempIndex % 8);
           const compByte = compData[byteIndex];
@@ -164,41 +144,44 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
       result.temperatureValues["Indoor"] = tempVal;
       result.humidityValues = humVal;
   } else if (collectorId >= 0x03) {
-       // Unknown or other collector type
-       // Just find BB and consume
-       let endIndex = -1;
-       for(let k=5; k<Math.min(packetStart.length, 100); k++) {
-           if (packetStart[k] === 0xBB) {
-               endIndex = k;
-               break;
-           }
-       }
-       if (endIndex !== -1) {
-           packetLength = endIndex + 1;
-       } else {
+       // Treat 03+ as Temperature collectors (similar to 01)
+       // Using fixed 45 bytes length as 2C header determines start and we assume standard length
+       
+       if (packetStart.length < 45) {
+           console.log("Packet " + collectorId + " too short", packetStart.length);
            return null;
+       }
+       packetLength = 45;
+       
+       const tempData = packetStart.slice(5, 40);
+       const compData = packetStart.slice(40, 45);
+
+       let tempIndex = 0;
+       for (let cable = 1; cable <= 7; cable++) {
+         for (let point = 1; point <= 5; point++) {
+           if (tempIndex >= tempData.length) break;
+           
+           const rawTemp = tempData[tempIndex];
+           const byteIndex = Math.floor(tempIndex / 8);
+           const bitIndex = 7 - (tempIndex % 8);
+           const compByte = compData[byteIndex];
+           const compBit = (compByte >> bitIndex) & 0x01;
+           const compValue = compBit === 1 ? 0.25 : 0.0;
+   
+           let tempValue = rawTemp / 2.0;
+           if (rawTemp >= 0x80) {
+              tempValue = -((rawTemp - 0x80) / 2.0);
+           }
+           tempValue += compValue;
+           
+           // Use collector ID in key to distinguish different collectors
+           result.temperatureValues[`${collectorId}-${cable}-${point}`] = parseFloat(tempValue.toFixed(2));
+           tempIndex++;
+         }
        }
   } else {
-       // collectorId 00? Or other?
-       // Should not happen if we look for 2C 5A A5
-       // But if packet[4] is strange, maybe it's not a valid packet start?
-       // If we return null, we might get stuck loop.
-       // Let's force skip 1 byte if we can't parse known ID?
-       // No, maybe it's just incomplete.
-       // If we assume valid header means valid packet start, we wait for BB.
-       // Let's try to find BB.
-       let endIndex = -1;
-       for(let k=5; k<Math.min(packetStart.length, 100); k++) {
-           if (packetStart[k] === 0xBB) {
-               endIndex = k;
-               break;
-           }
-       }
-       if (endIndex !== -1) {
-           packetLength = endIndex + 1;
-       } else {
-           return null;
-       }
+       // Unknown, just try to skip
+       return null;
   }
 
   // Return parsed result and the total bytes consumed (including garbage before header)
