@@ -29,8 +29,9 @@ import {
   DropdownMenu,
   DropdownItem,
 } from "@heroui/react";
-import { Plus, Search, MoreVertical, Edit, Trash2, BarChart2, Settings } from "lucide-react";
+import { Plus, Search, MoreVertical, Edit, Trash2, BarChart2, Settings, Play } from "lucide-react";
 import axios from "axios";
+import { collectFromSerial, collectFromMqtt } from "@/lib/collection";
 
 interface Granary {
   id: number;
@@ -97,6 +98,7 @@ export default function GranariesPage() {
   const { isOpen: isConfigOpen, onOpen: onConfigOpen, onClose: onConfigClose } = useDisclosure();
   const [configuringGranary, setConfiguringGranary] = useState<Granary | null>(null);
   const [configData, setConfigData] = useState<GranaryConfig>({});
+  const [collectingId, setCollectingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -197,6 +199,47 @@ export default function GranariesPage() {
     setConfiguringGranary(granary);
     setConfigData(granary.config || {});
     onConfigOpen();
+  };
+
+  const handleCollect = async (granary: Granary) => {
+    if (!granary.config || !granary.config.collectionDevice) {
+      alert("请先配置采集设备参数");
+      return;
+    }
+
+    setCollectingId(granary.id);
+    try {
+      let data;
+      if (granary.config.collectionDevice === 1) {
+        // Serial
+        data = await collectFromSerial();
+      } else if (granary.config.collectionDevice === 2 || granary.config.collectionDevice === 3) {
+        // MQTT
+        data = await collectFromMqtt({
+          ...granary.config,
+          collectionDevice: granary.config.collectionDevice,
+        });
+      } else {
+        alert("未知的设备类型");
+        return;
+      }
+
+      // Save data
+      await axios.post("/api/data", {
+        granaryId: granary.id,
+        temperatureValues: data.temperatureValues,
+        humidityValues: data.humidityValues,
+        sequenceNumber: 1,
+      });
+
+      alert("采集成功！");
+      fetchGranaries();
+    } catch (error: any) {
+      console.error(error);
+      alert(error.message || "采集失败");
+    } finally {
+      setCollectingId(null);
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -316,6 +359,17 @@ export default function GranariesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          color="primary"
+                          title="开始采集"
+                          isLoading={collectingId === granary.id}
+                          onClick={() => handleCollect(granary)}
+                        >
+                          {!collectingId && <Play className="w-4 h-4" />}
+                        </Button>
                         <Button
                           isIconOnly
                           size="sm"
