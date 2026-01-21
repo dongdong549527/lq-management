@@ -7,27 +7,45 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
+/// 粮库模型
 model Depot {
+  /// ID
   id              Int         @id @default(autoincrement())
+  /// 粮库名称
   name            String      @db.VarChar(255)
+  /// 地址
   address         String?     @db.Text
+  /// 联系人
   contactPerson   String?     @db.VarChar(255)
+  /// 联系电话
   phone           String?     @db.VarChar(50)
+  /// 省份
   province        String?     @db.VarChar(100)
+  /// 创建时间
   createdAt       DateTime    @default(now())
+  /// 更新时间
   updatedAt       DateTime    @updatedAt
 
   granaries       Granary[]
   users           UserDepotAssociation[]
 }
 
+/// 仓房模型
 model Granary {
+  /// ID
   id                  Int             @id @default(autoincrement())
+  /// 所属粮库ID
   depotId             Int
+  /// 仓房名称
   name                String          @db.VarChar(255)
+  /// 最后采集时间
   lastCollectedAt     DateTime?
+  /// 采集状态 (0: 空闲, 1: 采集中, 2: 离线)
   collectionStatus    Int             @default(0)
+  /// 创建时间
   createdAt           DateTime        @default(now())
+  /// 更新时间
   updatedAt           DateTime        @updatedAt
 
   depot               Depot           @relation(fields: [depotId], references: [id], onDelete: Cascade)
@@ -36,72 +54,127 @@ model Granary {
   data                GranaryData[]
 }
 
+/// 仓房配置模型
 model GranaryConfig {
+  /// ID
   id                    Int         @id @default(autoincrement())
+  /// 关联仓房ID
   granaryId             Int         @unique
+  /// 分机号
   extensionNumber       Int?
+  /// 测温板数量
   tempCollectorCount    Int?
+  /// 温湿板数量
   thCollectorCount      Int?
+  /// 起始序号
   startIndex            Int?
+  /// 结束序号
   endIndex              Int?
+  /// 温湿板序号
   thIndex               Int?
+  /// 测温电缆数量
   cableCount            Int?
+  /// 每根电缆测温点数量
   cablePointCount       Int?
+  /// 总采集点数量
   totalCollectorCount   Int?
+  /// MQTT订阅主题
   mqttTopicSub          String?     @db.VarChar(255)
+  /// MQTT发布主题
   mqttTopicPub          String?     @db.VarChar(255)
+  /// 采集设备类型
   collectionDevice      Int?
+  /// 创建时间
   createdAt             DateTime    @default(now())
+  /// 更新时间
   updatedAt             DateTime    @updatedAt
 
   granary               Granary     @relation(fields: [granaryId], references: [id], onDelete: Cascade)
 }
 
+/// 仓房信息模型
 model GranaryInfo {
+  /// ID
   id              Int         @id @default(autoincrement())
+  /// 关联仓房ID
   granaryId       Int         @unique
+  /// 保管员
   manager         String?     @db.VarChar(255)
+  /// 设计仓容(吨)
   designCapacity  Float?
+  /// 实际储量(吨)
   actualCapacity  Float?
+  /// 储粮性质
   storageNature   String?     @db.VarChar(100)
+  /// 品种
   variety         String?     @db.VarChar(255)
+  /// 入库时间
   entryTime       DateTime?
+  /// 产地
   origin          String?     @db.VarChar(255)
+  /// 等级
   grade           String?     @db.VarChar(100)
+  /// 出糙率(%)
   roughRiceYield  Float?
+  /// 水分(%)
   moisture        Float?
+  /// 备注
   remark          String?     @db.Text
+  /// 创建时间
   createdAt       DateTime    @default(now())
+  /// 更新时间
   updatedAt       DateTime    @updatedAt
 
   granary         Granary     @relation(fields: [granaryId], references: [id], onDelete: Cascade)
 }
 
+/// 粮情数据模型
 model GranaryData {
+  /// ID
   id                Int         @id @default(autoincrement())
+  /// 关联仓房ID
   granaryId         Int
+  /// 采集时间
   collectedAt       DateTime    @default(now())
+  /// 采集序号
   sequenceNumber    Int?
+  /// 温度数据(JSON)
   temperatureValues Json?
+  /// 湿度数据
   humidityValues    Float?
+  /// 创建时间
   createdAt         DateTime    @default(now())
 
   granary           Granary     @relation(fields: [granaryId], references: [id], onDelete: Cascade)
 }
 
+/// 用户模型
 model User {
+  /// ID
   id              Int         @id @default(autoincrement())
+  /// 用户名
   username        String      @db.VarChar(255) @unique
+  /// 密码哈希
   hashedPassword  String      @db.VarChar(255)
+  /// 邮箱
   email           String?     @db.VarChar(255) @unique
+  /// 角色 (0: 普通用户, 1: 管理员)
   role            Int         @default(0)
+  /// 姓名
   fullName        String?     @db.VarChar(255)
+  /// 手机号
   phone           String?     @db.VarChar(50)
+  /// 是否启用
   isActive        Boolean     @default(false)
+  /// 是否已审批
   isApproved      Boolean     @default(false)
+  /// 审批人ID
   approvedBy      Int?
+  /// 审批时间
   approvedAt      DateTime?
+  /// 创建时间
   createdAt       DateTime    @default(now())
+  /// 更新时间
   updatedAt       DateTime    @updatedAt
 
   associations    UserDepotAssociation[]
@@ -109,10 +182,15 @@ model User {
   approver        User?      @relation("ApprovedUsers", fields: [approvedBy], references: [id])
 }
 
+/// 用户-粮库关联模型
 model UserDepotAssociation {
+  /// ID
   id        Int      @id @default(autoincrement())
+  /// 用户ID
   userId    Int
+  /// 粮库ID
   depotId   Int
+  /// 创建时间
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
