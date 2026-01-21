@@ -387,7 +387,7 @@ export default function GranariesPage() {
                 <Select
                   label="所属粮库"
                   placeholder="请选择粮库"
-                  value={formData.depotId}
+                  selectedKeys={formData.depotId ? [formData.depotId] : []}
                   onChange={(e) =>
                     setFormData({ ...formData, depotId: e.target.value })
                   }
