@@ -20,7 +20,7 @@ export default async function RootLayout({
   const session = await getServerSession(authOptions);
 
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers session={session}>{children}</Providers>
       </body>

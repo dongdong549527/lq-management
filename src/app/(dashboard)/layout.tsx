@@ -45,6 +45,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { data: session } = useSession();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const isAdmin = session?.user?.role === 1;
 
@@ -82,51 +87,66 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         <NavbarContent justify="end" className="gap-4">
           <NavbarItem>
-            <Dropdown placement="bottom-end">
-              <DropdownTrigger>
-                <Avatar
-                  isBordered
-                  as="button"
-                  className="transition-transform"
-                  color="primary"
-                  name={session?.user?.fullName || session?.user?.username}
-                  size="sm"
-                  fallback={
-                    <span className="text-primary font-semibold">
-                      {userInitials}
-                    </span>
-                  }
-                />
-              </DropdownTrigger>
-              <DropdownMenu aria-label="Profile Actions" variant="flat">
-                <DropdownItem
-                  key="profile"
-                  className="h-14 gap-2"
-                  startContent={<User className="w-4 h-4" />}
-                >
-                  <p className="font-semibold">
-                    {session?.user?.fullName || session?.user?.username}
-                  </p>
-                  <p className="text-tiny text-default-500">
-                    {session?.user?.email || session?.user?.username}
-                  </p>
-                </DropdownItem>
-                <DropdownItem
-                  key="settings"
-                  startContent={<Settings className="w-4 h-4" />}
-                >
-                  设置
-                </DropdownItem>
-                <DropdownItem
-                  key="logout"
-                  color="danger"
-                  startContent={<LogOut className="w-4 h-4" />}
-                  onClick={() => signOut({ callbackUrl: "/login" })}
-                >
-                  退出登录
-                </DropdownItem>
-              </DropdownMenu>
-            </Dropdown>
+            {mounted ? (
+              <Dropdown placement="bottom-end">
+                <DropdownTrigger>
+                  <Avatar
+                    isBordered
+                    as="button"
+                    className="transition-transform"
+                    color="primary"
+                    name={session?.user?.fullName || session?.user?.username}
+                    size="sm"
+                    fallback={
+                      <span className="text-primary font-semibold">
+                        {userInitials}
+                      </span>
+                    }
+                  />
+                </DropdownTrigger>
+                <DropdownMenu aria-label="Profile Actions" variant="flat">
+                  <DropdownItem
+                    key="profile"
+                    className="h-14 gap-2"
+                    startContent={<User className="w-4 h-4" />}
+                  >
+                    <p className="font-semibold">
+                      {session?.user?.fullName || session?.user?.username}
+                    </p>
+                    <p className="text-tiny text-default-500">
+                      {session?.user?.email || session?.user?.username}
+                    </p>
+                  </DropdownItem>
+                  <DropdownItem
+                    key="settings"
+                    startContent={<Settings className="w-4 h-4" />}
+                  >
+                    设置
+                  </DropdownItem>
+                  <DropdownItem
+                    key="logout"
+                    color="danger"
+                    startContent={<LogOut className="w-4 h-4" />}
+                    onClick={() => signOut({ callbackUrl: "/login" })}
+                  >
+                    退出登录
+                  </DropdownItem>
+                </DropdownMenu>
+              </Dropdown>
+            ) : (
+              <Avatar
+                isBordered
+                className="transition-transform"
+                color="primary"
+                name={session?.user?.fullName || session?.user?.username}
+                size="sm"
+                fallback={
+                  <span className="text-primary font-semibold">
+                    {userInitials}
+                  </span>
+                }
+              />
+            )}
           </NavbarItem>
         </NavbarContent>
       </Navbar>
