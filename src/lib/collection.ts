@@ -237,13 +237,30 @@ export const collectFromSerial = async (extensionNumber: number, totalCollectorC
      console.log(`Starting collection with timeout: ${timeoutDuration}ms for ${totalCollectorCount} collectors`);
 
      try {
-         // Wait up to timeoutDuration
-         while (Date.now() - startTime < timeoutDuration) { 
-             const { value, done } = await reader.read();
-            if (done) {
-                console.log("Reader done");
-                break;
-            }
+          // Wait up to timeoutDuration
+          while (Date.now() - startTime < timeoutDuration) { 
+              // Create a timeout promise for this specific read
+              const readTimeout = new Promise<{ value: undefined, done: boolean } | undefined>((resolve) => 
+                  setTimeout(() => resolve(undefined), 2000) // 2s read timeout to allow checking global timeout
+              );
+
+              // Race between read and timeout
+              const result = await Promise.race([
+                  reader.read(),
+                  readTimeout
+              ]);
+
+              if (!result) {
+                  // Read timed out (no data for 2s), check global timeout and continue
+                  continue;
+              }
+
+              const { value, done } = result;
+
+              if (done) {
+                  console.log("Reader done");
+                  break;
+              }
             if (value) {
                 console.log("Received chunk:", Array.from(value).map(b => b.toString(16).padStart(2, '0')).join(' '));
                 const newData = new Uint8Array(accumulatedData.length + value.length);
