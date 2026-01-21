@@ -32,6 +32,7 @@ import {
 } from "recharts";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import axios from "axios";
+import Granary3DView from "@/components/Granary3DView";
 
 interface Granary {
   id: number;
@@ -63,8 +64,8 @@ interface DataPoint {
   id: number;
   collectedAt: string;
   sequenceNumber: number | null;
-  temperatureValues: number[];
-  humidityValues: number | null;
+  temperatureValues: any;
+  humidityValues: any;
 }
 
 interface ChartData {
@@ -73,6 +74,7 @@ interface ChartData {
   maxTemp: number;
   minTemp: number;
   humidity: number;
+  thTemp?: number;
 }
 
 export default function GranaryDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -124,9 +126,27 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
       setData(dataPoints);
 
       const formatted: ChartData[] = dataPoints.map((point) => {
-        const temps = Array.isArray(point.temperatureValues)
-          ? point.temperatureValues
-          : [];
+        // Handle temperatureValues whether it's array (legacy) or object (new)
+        let temps: number[] = [];
+        if (Array.isArray(point.temperatureValues)) {
+          temps = point.temperatureValues;
+        } else if (point.temperatureValues && typeof point.temperatureValues === 'object') {
+          // Filter out Indoor/Outdoor from average calculation
+          temps = Object.entries(point.temperatureValues)
+            .filter(([key]) => key !== 'Indoor' && key !== 'Outdoor')
+            .map(([, val]) => val as number);
+        }
+
+        // Handle humidityValues
+        let humidity = 0;
+        let thTemp = 0;
+        if (typeof point.humidityValues === 'number') {
+            humidity = point.humidityValues;
+        } else if (point.humidityValues && typeof point.humidityValues === 'object') {
+            humidity = point.humidityValues.humidity || 0;
+            thTemp = point.humidityValues.temperature || 0;
+        }
+
         return {
           time: new Date(point.collectedAt).toLocaleString(),
           avgTemp: temps.length
@@ -134,7 +154,8 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
             : 0,
           maxTemp: temps.length ? Math.max(...temps) : 0,
           minTemp: temps.length ? Math.min(...temps) : 0,
-          humidity: point.humidityValues || 0,
+          humidity,
+          thTemp
         };
       });
 
@@ -155,7 +176,21 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const latestData = data[0];
-  const temps = latestData?.temperatureValues || [];
+  // Calculate latest average temperature logic
+  let temps: number[] = [];
+  if (latestData) {
+      if (Array.isArray(latestData.temperatureValues)) {
+          temps = latestData.temperatureValues;
+      } else if (latestData.temperatureValues && typeof latestData.temperatureValues === 'object') {
+          temps = Object.entries(latestData.temperatureValues)
+            .filter(([key]) => key !== 'Indoor' && key !== 'Outdoor')
+            .map(([, val]) => val as number);
+      }
+  }
+
+  // Get indoor/outdoor values
+  const indoorVal = latestData?.temperatureValues?.['Indoor'];
+  const outdoorVal = latestData?.temperatureValues?.['Outdoor'];
 
   return (
     <div className="space-y-6">
@@ -190,7 +225,7 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div>
           <Card>
             <CardBody className="text-center">
@@ -234,14 +269,63 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
         <div>
           <Card>
             <CardBody className="text-center">
-              <p className="text-sm text-gray-500">最新湿度</p>
-              <p className="text-lg font-semibold mt-2">
-                {latestData?.humidityValues || "-"}%
-              </p>
+              <p className="text-sm text-gray-500">仓内温湿度</p>
+              <div className="mt-2">
+                {indoorVal ? (
+                    <div className="flex flex-col gap-1">
+                      <p className="text-lg font-semibold text-primary">
+                        {indoorVal.temperature}°C
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {indoorVal.humidity}%
+                      </p>
+                    </div>
+                ) : (
+                  <p className="text-lg font-semibold">-</p>
+                )}
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+        <div>
+          <Card>
+            <CardBody className="text-center">
+              <p className="text-sm text-gray-500">仓外温湿度</p>
+              <div className="mt-2">
+                {outdoorVal ? (
+                    <div className="flex flex-col gap-1">
+                      <p className="text-lg font-semibold text-primary">
+                        {outdoorVal.temperature}°C
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {outdoorVal.humidity}%
+                      </p>
+                    </div>
+                ) : (
+                  <p className="text-lg font-semibold">-</p>
+                )}
+              </div>
             </CardBody>
           </Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <p className="text-lg font-semibold">立体粮情</p>
+        </CardHeader>
+        <CardBody>
+          <div className="h-[500px] w-full min-w-0">
+              <Granary3DView 
+                 data={latestData?.temperatureValues || {}}
+                 config={{
+                     cableCount: granary.config?.cableCount || 0,
+                    cablePointCount: granary.config?.cablePointCount || 0
+                }}
+             />
+          </div>
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -257,8 +341,8 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
               暂无数据
             </div>
           ) : (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-64 w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%" debounce={50}>
                 <AreaChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="time" fontSize={12} />
@@ -303,25 +387,48 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
           <Table aria-label="数据列表">
             <TableHeader>
               <TableColumn>采集时间</TableColumn>
-              <TableColumn>序号</TableColumn>
-              <TableColumn>温度值</TableColumn>
-              <TableColumn>湿度</TableColumn>
+              <TableColumn>最高温</TableColumn>
+              <TableColumn>最低温</TableColumn>
+              <TableColumn>平均温</TableColumn>
+              <TableColumn>仓温</TableColumn>
+              <TableColumn>仓湿</TableColumn>
+              <TableColumn>外温</TableColumn>
+              <TableColumn>外湿</TableColumn>
             </TableHeader>
             <TableBody>
-              {data.slice(0, 10).map((point) => (
-                <TableRow key={point.id}>
-                  <TableCell>
-                    {new Date(point.collectedAt).toLocaleString()}
-                  </TableCell>
-                  <TableCell>{point.sequenceNumber || "-"}</TableCell>
-                  <TableCell>
-                    {Array.isArray(point.temperatureValues)
-                      ? point.temperatureValues.join(", ")
-                      : "-"}
-                  </TableCell>
-                  <TableCell>{point.humidityValues || "-"}%</TableCell>
-                </TableRow>
-              ))}
+              {data.slice(0, 10).map((point) => {
+                // Calculate stats for each row
+                let temps: number[] = [];
+                if (Array.isArray(point.temperatureValues)) {
+                  temps = point.temperatureValues;
+                } else if (point.temperatureValues && typeof point.temperatureValues === 'object') {
+                   temps = Object.entries(point.temperatureValues)
+                    .filter(([key]) => key !== 'Indoor' && key !== 'Outdoor')
+                    .map(([, val]) => val as number);
+                }
+                
+                const maxTemp = temps.length ? Math.max(...temps) : "-";
+                const minTemp = temps.length ? Math.min(...temps) : "-";
+                const avgTemp = temps.length ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : "-";
+                
+                const indoor = point.temperatureValues?.['Indoor'];
+                const outdoor = point.temperatureValues?.['Outdoor'];
+
+                return (
+                  <TableRow key={point.id}>
+                    <TableCell>
+                      {new Date(point.collectedAt).toLocaleString()}
+                    </TableCell>
+                    <TableCell>{maxTemp}°C</TableCell>
+                    <TableCell>{minTemp}°C</TableCell>
+                    <TableCell>{avgTemp}°C</TableCell>
+                    <TableCell>{indoor ? `${indoor.temperature}°C` : "-"}</TableCell>
+                    <TableCell>{indoor ? `${indoor.humidity}%` : "-"}</TableCell>
+                    <TableCell>{outdoor ? `${outdoor.temperature}°C` : "-"}</TableCell>
+                    <TableCell>{outdoor ? `${outdoor.humidity}%` : "-"}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardBody>

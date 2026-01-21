@@ -33,6 +33,7 @@ import {
 } from "@heroui/react";
 import { Plus, Search, MoreVertical, Edit, Trash2 } from "lucide-react";
 import axios from "axios";
+import { toast } from "sonner";
 
 interface User {
   id: number;
@@ -142,7 +143,7 @@ export default function UsersPage() {
 
       } else {
         if (!data.password) {
-          alert("密码不能为空");
+          toast.error("密码不能为空");
           return;
         }
         const res = await axios.post("/api/users", data);
@@ -158,8 +159,9 @@ export default function UsersPage() {
       setEditingUser(null);
       resetForm();
       fetchUsers();
+      toast.success(editingUser ? "用户更新成功" : "用户添加成功");
     } catch (error: any) {
-      alert(error.response?.data?.error || "操作失败");
+      toast.error(error.response?.data?.error || "操作失败");
     }
   };
 
@@ -183,8 +185,9 @@ export default function UsersPage() {
     try {
       await axios.delete(`/api/users/${id}`);
       fetchUsers();
+      toast.success("删除成功");
     } catch (error) {
-      alert("删除失败");
+      toast.error("删除失败");
     }
   };
 

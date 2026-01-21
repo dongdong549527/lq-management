@@ -31,6 +31,7 @@ import {
 } from "@heroui/react";
 import { Plus, Search, MoreVertical, Edit, Trash2, BarChart2, Settings, Play } from "lucide-react";
 import axios from "axios";
+import { toast } from "sonner";
 import { collectFromSerial, collectFromMqtt } from "@/lib/collection";
 
 interface Granary {
@@ -52,6 +53,8 @@ interface GranaryConfig {
   startIndex?: number;
   endIndex?: number;
   thIndex?: number;
+  indoorThIndex?: number;
+  outdoorThIndex?: number;
   cableCount?: number;
   cablePointCount?: number;
   totalCollectorCount?: number;
@@ -141,7 +144,7 @@ export default function GranariesPage() {
 
   const handleSubmit = async () => {
     if (!formData.depotId || !formData.name) {
-      alert("请填写完整信息");
+      toast.error("请填写完整信息");
       return;
     }
     try {
@@ -154,8 +157,9 @@ export default function GranariesPage() {
       setEditingGranary(null);
       resetForm();
       fetchGranaries();
+      toast.success(editingGranary ? "仓房更新成功" : "仓房添加成功");
     } catch (error: any) {
-      alert(error.response?.data?.error || "操作失败");
+      toast.error(error.response?.data?.error || "操作失败");
     }
   };
 
@@ -170,9 +174,9 @@ export default function GranariesPage() {
       onConfigClose();
       setConfiguringGranary(null);
       fetchGranaries();
-      alert("配置更新成功");
+      toast.success("配置更新成功");
     } catch (error: any) {
-      alert(error.response?.data?.error || "配置更新失败");
+      toast.error(error.response?.data?.error || "配置更新失败");
     }
   };
 
@@ -203,7 +207,7 @@ export default function GranariesPage() {
 
   const handleCollect = async (granary: Granary) => {
     if (!granary.config || !granary.config.collectionDevice) {
-      alert("请先配置采集设备参数");
+      toast.warning("请先配置采集设备参数");
       return;
     }
 
@@ -212,11 +216,10 @@ export default function GranariesPage() {
       let data;
       if (granary.config.collectionDevice === 1) {
         // Serial
-        // Pass extension number (default to 1 if not set)
-        const ext = granary.config.extensionNumber || 1;
-        // Default totalCollectorCount to 1 if not set
-        const totalCount = granary.config.totalCollectorCount || 1;
-        data = await collectFromSerial(ext, totalCount);
+        data = await collectFromSerial({
+          ...granary.config,
+          collectionDevice: 1,
+        });
       } else if (granary.config.collectionDevice === 2 || granary.config.collectionDevice === 3) {
         // MQTT
         data = await collectFromMqtt({
@@ -224,7 +227,7 @@ export default function GranariesPage() {
           collectionDevice: granary.config.collectionDevice,
         });
       } else {
-        alert("未知的设备类型");
+        toast.error("未知的设备类型");
         return;
       }
 
@@ -236,11 +239,11 @@ export default function GranariesPage() {
         sequenceNumber: 1,
       });
 
-      alert("采集成功！");
+      toast.success("采集成功！");
       fetchGranaries();
     } catch (error: any) {
       console.error(error);
-      alert(error.message || "采集失败");
+      toast.error(error.message || "采集失败");
     } finally {
       setCollectingId(null);
     }
@@ -251,8 +254,9 @@ export default function GranariesPage() {
     try {
       await axios.delete(`/api/granaries/${id}`);
       fetchGranaries();
+      toast.success("删除成功");
     } catch (error) {
-      alert("删除失败");
+      toast.error("删除失败");
     }
   };
 
@@ -639,11 +643,20 @@ export default function GranariesPage() {
                     value={configData.totalCollectorCount?.toString() || ""}
                     onValueChange={(v) => setConfigData({ ...configData, totalCollectorCount: v ? parseInt(v) : undefined })}
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
                   <Input
-                    label="温湿索引"
+                    label="仓温仓湿索引"
                     type="number"
-                    value={configData.thIndex?.toString() || ""}
-                    onValueChange={(v) => setConfigData({ ...configData, thIndex: v ? parseInt(v) : undefined })}
+                    value={configData.indoorThIndex?.toString() || ""}
+                    onValueChange={(v) => setConfigData({ ...configData, indoorThIndex: v ? parseInt(v) : undefined })}
+                  />
+                  <Input
+                    label="外温外湿索引"
+                    type="number"
+                    value={configData.outdoorThIndex?.toString() || ""}
+                    onValueChange={(v) => setConfigData({ ...configData, outdoorThIndex: v ? parseInt(v) : undefined })}
                   />
                 </div>
 

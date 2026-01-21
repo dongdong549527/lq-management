@@ -33,6 +33,7 @@ import {
 } from "@heroui/react";
 import { Plus, Search, MoreVertical, Edit, Trash2, Eye } from "lucide-react";
 import axios from "axios";
+import { toast } from "sonner";
 
 interface Depot {
   id: number;
@@ -100,8 +101,9 @@ export default function DepotsPage() {
       setEditingDepot(null);
       resetForm();
       fetchDepots();
+      toast.success(editingDepot ? "粮库更新成功" : "粮库添加成功");
     } catch (error: any) {
-      alert(error.response?.data?.error || "操作失败");
+      toast.error(error.response?.data?.error || "操作失败");
     }
   };
 
@@ -122,8 +124,9 @@ export default function DepotsPage() {
     try {
       await axios.delete(`/api/depots/${id}`);
       fetchDepots();
+      toast.success("删除成功");
     } catch (error) {
-      alert("删除失败");
+      toast.error("删除失败");
     }
   };
 

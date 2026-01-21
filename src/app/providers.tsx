@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import { SessionProvider } from "next-auth/react";
 import { NextUIProviderWrapper } from "@/providers/nextui-provider";
+import { Toaster } from "sonner";
 
 export function Providers({ children, session }: { children: ReactNode, session?: any }) {
   return (
@@ -16,6 +17,7 @@ export function Providers({ children, session }: { children: ReactNode, session?
         }}
       >
         {children}
+        <Toaster richColors position="top-right" />
       </NextUIProviderWrapper>
     </SessionProvider>
   );

@@ -71,7 +71,11 @@ model GranaryConfig {
   /// 结束序号
   endIndex              Int?
   /// 温湿板序号
-  thIndex               Int?
+  /// thIndex               Int?
+  /// 仓温仓湿板序号
+  indoorThIndex         Int?
+  /// 外温外湿板序号
+  outdoorThIndex        Int?
   /// 测温电缆数量
   cableCount            Int?
   /// 每根电缆测温点数量
@@ -139,11 +143,11 @@ model GranaryData {
   /// 采集时间
   collectedAt       DateTime    @default(now())
   /// 采集序号
-  sequenceNumber    Int?
+  // sequenceNumber    Int?
   /// 温度数据(JSON)
   temperatureValues Json?
   /// 湿度数据
-  humidityValues    Float?
+  // humidityValues    Json?
   /// 创建时间
   createdAt         DateTime    @default(now())
 

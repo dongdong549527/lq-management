@@ -21,6 +21,7 @@ import {
 } from "@heroui/react";
 import { Check, X, UserCheck, UserX } from "lucide-react";
 import axios from "axios";
+import { toast } from "sonner";
 
 interface User {
   id: number;
@@ -70,8 +71,9 @@ export default function ApprovalsPage() {
     try {
       await axios.put(`/api/users/approvals/${userId}`, { action });
       fetchUsers();
+      toast.success(action === "approve" ? "已批准" : "已拒绝");
     } catch (error) {
-      alert("操作失败");
+      toast.error("操作失败");
     }
   };
 

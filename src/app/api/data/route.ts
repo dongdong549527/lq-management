@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { granaryId, sequenceNumber, temperatureValues, humidityValues } = body;
+    const { granaryId, temperatureValues } = body;
 
     if (!granaryId) {
       return NextResponse.json({ error: "仓房ID为必填项" }, { status: 400 });
@@ -64,9 +64,7 @@ export async function POST(request: NextRequest) {
     const data = await prisma.granaryData.create({
       data: {
         granaryId,
-        sequenceNumber,
         temperatureValues,
-        humidityValues,
       },
     });
 
