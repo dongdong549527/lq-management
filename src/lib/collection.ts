@@ -30,8 +30,21 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
 
   if (headerIndex === -1) return null; // No header found
 
-  // If we have data before header, we should discard it, but for simplicity
-  // let's assume we consume from headerIndex.
+  // If we have data before header, we should discard it
+  // BUT we only discard if we found a header. 
+  // If we didn't find a header, we keep waiting (return null).
+  // Wait, if headerIndex > 0, we can discard 0..headerIndex-1.
+  // But this function returns "bytesRead". 
+  // If we find header at index 10, but packet is incomplete, we should return null?
+  // No, if packet is incomplete, we return null, and caller keeps accumulating.
+  // BUT if we return null, the caller doesn't know we found a POTENTIAL header start at 10.
+  // Next time it calls with more data, we scan from 0 again.
+  // This is inefficient but safe.
+  
+  // However, the issue might be that we scan, find header, check length, fail check, return null.
+  // Then caller appends data, calls again.
+  // We scan, find header at same place, check length... eventually succeed.
+  
   const packetStart = data.slice(headerIndex);
   if (packetStart.length < 5) return null;
 
@@ -99,6 +112,9 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
           if (tempIndex >= tempData.length) break;
           
           const rawTemp = tempData[tempIndex];
+          // If rawTemp is 0 (unconnected?), skip or set as 0?
+          // Protocol doesn't say.
+          
           const byteIndex = Math.floor(tempIndex / 8);
           const bitIndex = 7 - (tempIndex % 8);
           const compByte = compData[byteIndex];
@@ -124,7 +140,8 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
       if (packetStart.length < 10) return null;
       
       let endIndex = -1;
-      for(let k=9; k<Math.min(packetStart.length, 30); k++) {
+      // Scan a bit further for BB, in case of extra bytes
+      for(let k=9; k<Math.min(packetStart.length, 50); k++) {
           if (packetStart[k] === 0xBB) {
               endIndex = k;
               break;
@@ -144,29 +161,42 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
   
       result.temperatureValues["Indoor"] = tempVal;
       result.humidityValues = humVal;
+  } else if (collectorId >= 0x03) {
+       // Unknown or other collector type
+       // Just find BB and consume
+       let endIndex = -1;
+       for(let k=5; k<Math.min(packetStart.length, 100); k++) {
+           if (packetStart[k] === 0xBB) {
+               endIndex = k;
+               break;
+           }
+       }
+       if (endIndex !== -1) {
+           packetLength = endIndex + 1;
+       } else {
+           return null;
+       }
   } else {
-      // Unknown collector, skip header and continue search?
-      // Or assume some length? 
-      // Safest is to consume 1 byte (the header start) and retry search next time.
-      // But here we return null so outer loop advances?
-      // Actually we should skip this "packet" if we can't parse it but it looks like a header.
-      // Let's just return null and let the accumulator wait for more data.
-      // WARNING: If we have a valid header but unknown ID, we might get stuck if we don't consume it.
-      // Let's assume it's valid but we don't care, consume it?
-      // For now, let's return null (wait for more data) if we can't find BB.
-      // If we find BB, we consume.
-      let endIndex = -1;
-      for(let k=5; k<Math.min(packetStart.length, 100); k++) {
-          if (packetStart[k] === 0xBB) {
-              endIndex = k;
-              break;
-          }
-      }
-      if (endIndex !== -1) {
-          packetLength = endIndex + 1;
-      } else {
-          return null;
-      }
+       // collectorId 00? Or other?
+       // Should not happen if we look for 2C 5A A5
+       // But if packet[4] is strange, maybe it's not a valid packet start?
+       // If we return null, we might get stuck loop.
+       // Let's force skip 1 byte if we can't parse known ID?
+       // No, maybe it's just incomplete.
+       // If we assume valid header means valid packet start, we wait for BB.
+       // Let's try to find BB.
+       let endIndex = -1;
+       for(let k=5; k<Math.min(packetStart.length, 100); k++) {
+           if (packetStart[k] === 0xBB) {
+               endIndex = k;
+               break;
+           }
+       }
+       if (endIndex !== -1) {
+           packetLength = endIndex + 1;
+       } else {
+           return null;
+       }
   }
 
   // Return parsed result and the total bytes consumed (including garbage before header)
