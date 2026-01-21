@@ -139,6 +139,7 @@ export async function PUT(
             mqttTopicSub: config.mqttTopicSub,
             mqttTopicPub: config.mqttTopicPub,
             collectionDevice: config.collectionDevice !== undefined ? parseInt(config.collectionDevice) : undefined,
+            serialPort: config.serialPort,
           },
           update: {
             extensionNumber: config.extensionNumber !== undefined ? parseInt(config.extensionNumber) : null,
@@ -153,6 +154,7 @@ export async function PUT(
             mqttTopicSub: config.mqttTopicSub,
             mqttTopicPub: config.mqttTopicPub,
             collectionDevice: config.collectionDevice !== undefined ? parseInt(config.collectionDevice) : null,
+            serialPort: config.serialPort,
           },
         },
       };

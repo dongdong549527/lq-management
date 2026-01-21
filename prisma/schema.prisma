@@ -82,8 +82,10 @@ model GranaryConfig {
   mqttTopicSub          String?     @db.VarChar(255)
   /// MQTT发布主题
   mqttTopicPub          String?     @db.VarChar(255)
-  /// 采集设备类型
+  /// 采集设备类型 (1: 串口主机, 2: 网络主机, 3: 网络分机)
   collectionDevice      Int?
+  /// 串口号 (仅当 collectionDevice 为 1 时使用)
+  serialPort            String?     @db.VarChar(50)
   /// 创建时间
   createdAt             DateTime    @default(now())
   /// 更新时间

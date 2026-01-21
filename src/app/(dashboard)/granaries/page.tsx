@@ -57,6 +57,7 @@ interface GranaryConfig {
   mqttTopicSub?: string;
   mqttTopicPub?: string;
   collectionDevice?: number;
+  serialPort?: string;
 }
 
 interface Depot {
@@ -521,13 +522,24 @@ export default function GranariesPage() {
                   value={configData.extensionNumber?.toString() || ""}
                   onValueChange={(v) => setConfigData({ ...configData, extensionNumber: v ? parseInt(v) : undefined })}
                 />
-                <Input
+                <Select
                   label="采集设备类型"
-                  type="number"
-                  placeholder="请输入设备类型ID"
-                  value={configData.collectionDevice?.toString() || ""}
-                  onValueChange={(v) => setConfigData({ ...configData, collectionDevice: v ? parseInt(v) : undefined })}
-                />
+                  placeholder="请选择设备类型"
+                  selectedKeys={configData.collectionDevice ? [configData.collectionDevice.toString()] : []}
+                  onChange={(e) => setConfigData({ ...configData, collectionDevice: e.target.value ? parseInt(e.target.value) : undefined })}
+                >
+                  <SelectItem key="1" value="1">串口主机</SelectItem>
+                  <SelectItem key="2" value="2">网络主机</SelectItem>
+                  <SelectItem key="3" value="3">网络分机</SelectItem>
+                </Select>
+                {configData.collectionDevice === 1 && (
+                  <Input
+                    label="串口号"
+                    placeholder="例如: COM1"
+                    value={configData.serialPort || ""}
+                    onValueChange={(v) => setConfigData({ ...configData, serialPort: v })}
+                  />
+                )}
               </div>
 
               <div className="space-y-4">
