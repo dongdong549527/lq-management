@@ -94,18 +94,7 @@ export async function POST(request: NextRequest) {
     const userRole = typeof session.user.role === 'string' ? parseInt(session.user.role) : session.user.role;
 
     if (userRole !== 1) {
-      const association = await prisma.userDepotAssociation.findUnique({
-        where: {
-          userId_depotId: {
-            userId: parseInt(session.user.id),
-            depotId: parsedDepotId,
-          },
-        },
-      });
-
-      if (!association) {
-        return NextResponse.json({ error: "无权限在该粮库创建仓房" }, { status: 403 });
-      }
+      return NextResponse.json({ error: "无权限创建仓房" }, { status: 403 });
     }
 
     const granary = await prisma.granary.create({

@@ -239,10 +239,12 @@ export default function GranariesPage() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">仓房管理</h1>
-        <Button color="primary" onClick={handleOpenModal}>
-          <Plus className="w-4 h-4 mr-2" />
-          添加仓房
-        </Button>
+        {session?.user?.role === 1 && (
+          <Button color="primary" onClick={handleOpenModal}>
+            <Plus className="w-4 h-4 mr-2" />
+            添加仓房
+          </Button>
+        )}
       </div>
 
       <Card>
