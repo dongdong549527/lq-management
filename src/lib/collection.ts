@@ -30,6 +30,8 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
 
   if (headerIndex === -1) return null; // No header found
 
+  console.log("Found header at index", headerIndex);
+
   // If we have data before header, we should discard it
   // BUT we only discard if we found a header. 
   // If we didn't find a header, we keep waiting (return null).
@@ -46,9 +48,13 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
   // We scan, find header at same place, check length... eventually succeed.
   
   const packetStart = data.slice(headerIndex);
-  if (packetStart.length < 5) return null;
+  if (packetStart.length < 5) {
+      console.log("Packet too short (header only)", packetStart.length);
+      return null;
+  }
 
   const collectorId = packetStart[4];
+  console.log("Collector ID:", collectorId.toString(16));
   
   let packetLength = 0;
   const result: CollectionResult = {
@@ -88,7 +94,10 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
       // 40-44: Comp (5)
       // 45...: Padding/BB
       
-      if (packetStart.length < 46) return null; // Need at least 46 bytes to see BB at 45?
+      if (packetStart.length < 46) {
+          console.log("Packet 01 too short", packetStart.length);
+          return null; // Need at least 46 bytes to see BB at 45?
+      }
       
       // Check BB at 45? Or maybe later.
       // Let's just consume 45 bytes + scan for BB within reasonable range (e.g. up to 64 bytes)
@@ -100,7 +109,10 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
           }
       }
       
-      if (endIndex === -1) return null; // Packet not complete
+      if (endIndex === -1) {
+          console.log("Packet 01 BB not found in range 45-80", Array.from(packetStart).map(b => b.toString(16).padStart(2, '0')).join(' '));
+          return null; // Packet not complete
+      }
       packetLength = endIndex + 1;
 
       const tempData = packetStart.slice(5, 40);
