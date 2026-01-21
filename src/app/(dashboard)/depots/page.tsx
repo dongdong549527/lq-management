@@ -218,6 +218,7 @@ export default function DepotsPage() {
                           <DropdownItem
                             key="view"
                             startContent={<Eye className="w-4 h-4" />}
+                            href={`/depots/${depot.id}`}
                           >
                             查看详情
                           </DropdownItem>
