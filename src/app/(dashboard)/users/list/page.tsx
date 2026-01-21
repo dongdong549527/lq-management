@@ -294,10 +294,10 @@ export default function UsersPage() {
                     <TableCell>
                       <Chip
                         size="sm"
-                        color={user.isActive ? "success" : "danger"}
+                        color={!user.isApproved ? "warning" : user.isActive ? "success" : "danger"}
                         variant="dot"
                       >
-                        {user.isActive ? "启用" : "禁用"}
+                        {!user.isApproved ? "待审批" : user.isActive ? "启用" : "禁用"}
                       </Chip>
                     </TableCell>
                     <TableCell>{user.phone || "-"}</TableCell>
