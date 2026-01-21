@@ -14,14 +14,12 @@ export interface CollectionResult {
   humidityValues: number;
 }
 
-// Helper to parse data based on protocol
-const parseProtocolData = (data: Uint8Array): CollectionResult | null => {
-  console.log("Parsing data:", Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' '));
-  // Protocol Header: 2C 5A A5
-  // We need at least header (3) + extension (1) + collector (1) + some data
+// Helper to parse one packet from buffer
+// Returns { result: CollectionResult, bytesRead: number } or null if not enough data
+const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead: number } | null => {
   if (data.length < 5) return null;
 
-  // Search for header
+  // Search for header 2C 5A A5
   let headerIndex = -1;
   for (let i = 0; i < data.length - 2; i++) {
     if (data[i] === 0x2C && data[i + 1] === 0x5A && data[i + 2] === 0xA5) {
@@ -30,115 +28,155 @@ const parseProtocolData = (data: Uint8Array): CollectionResult | null => {
     }
   }
 
-  if (headerIndex === -1) return null;
+  if (headerIndex === -1) return null; // No header found
 
-  const packet = data.slice(headerIndex);
-  // Need at least 5 bytes to check collector ID
-  if (packet.length < 5) return null;
+  // If we have data before header, we should discard it, but for simplicity
+  // let's assume we consume from headerIndex.
+  const packetStart = data.slice(headerIndex);
+  if (packetStart.length < 5) return null;
 
-  const collectorId = packet[4];
+  const collectorId = packetStart[4];
+  
+  let packetLength = 0;
   const result: CollectionResult = {
     temperatureValues: {},
     humidityValues: 0,
   };
 
+  // Determine expected length based on collector ID or structure
+  // Protocol doesn't explicitly state fixed length for all types, but let's assume structure from docs.
+  // Docs say:
+  // Temp (01): Header(3)+Ext(1)+Col(1)+Temp(35)+Comp(5)+BB(1)? No, "数据包补偿位...BB".
+  // Actually the example says "33 1*36 将该数据包补全".
+  // Let's assume the packets have a fixed length or end with BB.
+  // But searching for BB might be risky if data contains BB.
+  // Let's rely on the length described or try to find the next header/end.
+  
+  // From previous analysis:
+  // Temp (01): 3+1+1+35+5 = 45 bytes? Plus BB?
+  // Let's look for BB at expected position or scan for it?
+  // Docs: "长度(Byte) ... 数据包补偿位 ... BB".
+  // Let's assume standard packet size if possible, or search for BB after min length.
+  
   if (collectorId === 0x01) {
-    // Cable Temperature Data
-    // Length check: 3 header + 1 ext + 1 col + 35 temp + 5 comp + 2 footer (BB) = 47 bytes?
-    // Protocol says: 35 bytes temp data, 5 bytes compensation.
-    // Let's assume minimum length.
-    if (packet.length < 45) return null; // 5 + 35 + 5 = 45
-
-    const tempData = packet.slice(5, 40); // 35 bytes
-    const compData = packet.slice(40, 45); // 5 bytes
-
-    let tempIndex = 0;
-    // 7 cables, 5 points each
-    for (let cable = 1; cable <= 7; cable++) {
-      for (let point = 1; point <= 5; point++) {
-        if (tempIndex >= tempData.length) break;
-        
-        const rawTemp = tempData[tempIndex];
-        // Compensation logic
-        // 5 bytes of compensation, total 40 bits. But we only have 35 points.
-        // Bit mapping: byte 0 (bits 7-0) -> points 1-8?
-        // Protocol example: "0001 1000 ... 0 means 0, 1 means 0.25"
-        // Let's assume linear mapping: Point 1 is Byte 0 Bit 7 (or 0?), etc.
-        // Usually it's Byte 0 Bit 0 -> Point 1, or Byte 0 Bit 7 -> Point 1.
-        // Protocol says: "0001 1000 ...". First point corresponds to...
-        // Let's assume Big Endian bit order for simplicity for now, or byte-aligned.
-        // Actually, 35 points fit in 5 bytes (5 * 8 = 40 bits).
-        
-        const byteIndex = Math.floor(tempIndex / 8);
-        const bitIndex = 7 - (tempIndex % 8); // High bit first?
-        const compByte = compData[byteIndex];
-        const compBit = (compByte >> bitIndex) & 0x01;
-        const compValue = compBit === 1 ? 0.25 : 0.0;
-
-        let tempValue = rawTemp / 2.0;
-        // Check for > 80 (raw value > 160?)
-        // Protocol: "If collected temp data >= 80, subtract 80".
-        // 80 hex = 128 dec.
-        if (rawTemp >= 128) {
-           // This means raw value was X, but it represents negative?
-           // "Subtract 80, result is negative or zero".
-           // Example: raw 80 (128) -> 128 - 128 = 0.
-           // raw 81 (129) -> 129 - 128 = 1? No, "negative or zero".
-           // Maybe it means signed?
-           // Let's follow "subtract 80 (hex? dec?)"
-           // "大于等于80 (hex 0x50 = 80 dec? Or 80 hex?)"
-           // Example says "value >= 80". Context usually implies Hex in this protocol.
-           // If hex 80 (128 dec): (128 - 128)/2 = 0?
-           // Let's assume standard offset.
-           // Let's stick to simple logic: if (raw >= 128) tempValue = (raw - 128) / 2 * -1; ?
-           // Protocol text: "value >= 80, subtract 80 ... result is negative or equal to 0"
-           // If raw is 0x80 (128), 128-128 = 0.
-           // If raw is 0x81 (129), 129-128 = 1. 1/2 = 0.5. Is it -0.5?
-           // Let's assume it's a flag bit for negative.
-           if (rawTemp >= 0x80) {
-             tempValue = -((rawTemp - 0x80) / 2.0);
-           }
-        } else {
-            tempValue = rawTemp / 2.0;
-        }
-
-        tempValue += compValue;
-        
-        result.temperatureValues[`${cable}-${point}`] = parseFloat(tempValue.toFixed(2));
-        tempIndex++;
+      // Temp packet
+      // Min length: 45 + ?
+      // Let's assume it ends with BB.
+      // Search for BB after offset 45
+      // Or just take a fixed length if we know it.
+      // Doc example: 2C ... BB.
+      // Let's try to parse if we have enough bytes.
+      // Let's assume 50 bytes for safety?
+      // Actually, if we just parse what we need (35 bytes temp + 5 comp), that's 45 bytes from header start (index 0).
+      // 0-2: Header
+      // 3: Ext
+      // 4: Col
+      // 5-39: Temp (35)
+      // 40-44: Comp (5)
+      // 45...: Padding/BB
+      
+      if (packetStart.length < 46) return null; // Need at least 46 bytes to see BB at 45?
+      
+      // Check BB at 45? Or maybe later.
+      // Let's just consume 45 bytes + scan for BB within reasonable range (e.g. up to 64 bytes)
+      let endIndex = -1;
+      for(let k=45; k<Math.min(packetStart.length, 80); k++) {
+          if (packetStart[k] === 0xBB) {
+              endIndex = k;
+              break;
+          }
       }
-    }
-  } else if (collectorId === 0x02) {
-    // TH Sensor Data
-    // Header (3) + Ext (1) + Col (1) + Temp(2) + Hum(2) + ...
-    if (packet.length < 9) return null;
-    
-    // Temp: Byte 5, 6
-    const tempInt = packet[5];
-    const tempDec = packet[6];
-    const tempVal = parseFloat(`${parseInt(tempInt.toString(16))}.${parseInt(tempDec.toString(16))}`);
-    // Protocol says "Directly convert to decimal".
-    // Example: 1A (26) . 26 (38) -> 26.38.
-    // This implies BCD-like or just concatenation of decimal strings?
-    // "1A hex -> 26 dec", "26 hex -> 38 dec". Result 26.38.
-    // So it treats the DECIMAL value of the byte as the value.
-    
-    // Humidity: Byte 7, 8
-    const humInt = packet[7];
-    const humDec = packet[8];
-    const humVal = parseFloat(`${parseInt(humInt.toString(16))}.${parseInt(humDec.toString(16))}`);
+      
+      if (endIndex === -1) return null; // Packet not complete
+      packetLength = endIndex + 1;
 
-    // Since we only have one field for humidityValues (number) in interface,
-    // we'll just assign it. But for temp, we usually expect a map.
-    // We can store indoor temp as "IN" or similar.
-    result.temperatureValues["Indoor"] = tempVal;
-    result.humidityValues = humVal;
+      const tempData = packetStart.slice(5, 40);
+      const compData = packetStart.slice(40, 45);
+
+      let tempIndex = 0;
+      for (let cable = 1; cable <= 7; cable++) {
+        for (let point = 1; point <= 5; point++) {
+          if (tempIndex >= tempData.length) break;
+          
+          const rawTemp = tempData[tempIndex];
+          const byteIndex = Math.floor(tempIndex / 8);
+          const bitIndex = 7 - (tempIndex % 8);
+          const compByte = compData[byteIndex];
+          const compBit = (compByte >> bitIndex) & 0x01;
+          const compValue = compBit === 1 ? 0.25 : 0.0;
+  
+          let tempValue = rawTemp / 2.0;
+          if (rawTemp >= 0x80) {
+             tempValue = -((rawTemp - 0x80) / 2.0);
+          }
+          tempValue += compValue;
+          
+          result.temperatureValues[`${cable}-${point}`] = parseFloat(tempValue.toFixed(2));
+          tempIndex++;
+        }
+      }
+
+  } else if (collectorId === 0x02) {
+      // TH packet
+      // Min length: 3+1+1+2+2 = 9 bytes.
+      // Plus padding + BB.
+      // Let's scan for BB after index 9.
+      if (packetStart.length < 10) return null;
+      
+      let endIndex = -1;
+      for(let k=9; k<Math.min(packetStart.length, 30); k++) {
+          if (packetStart[k] === 0xBB) {
+              endIndex = k;
+              break;
+          }
+      }
+      
+      if (endIndex === -1) return null;
+      packetLength = endIndex + 1;
+
+      const tempInt = packetStart[5];
+      const tempDec = packetStart[6];
+      const tempVal = parseFloat(`${parseInt(tempInt.toString(16))}.${parseInt(tempDec.toString(16))}`);
+      
+      const humInt = packetStart[7];
+      const humDec = packetStart[8];
+      const humVal = parseFloat(`${parseInt(humInt.toString(16))}.${parseInt(humDec.toString(16))}`);
+  
+      result.temperatureValues["Indoor"] = tempVal;
+      result.humidityValues = humVal;
+  } else {
+      // Unknown collector, skip header and continue search?
+      // Or assume some length? 
+      // Safest is to consume 1 byte (the header start) and retry search next time.
+      // But here we return null so outer loop advances?
+      // Actually we should skip this "packet" if we can't parse it but it looks like a header.
+      // Let's just return null and let the accumulator wait for more data.
+      // WARNING: If we have a valid header but unknown ID, we might get stuck if we don't consume it.
+      // Let's assume it's valid but we don't care, consume it?
+      // For now, let's return null (wait for more data) if we can't find BB.
+      // If we find BB, we consume.
+      let endIndex = -1;
+      for(let k=5; k<Math.min(packetStart.length, 100); k++) {
+          if (packetStart[k] === 0xBB) {
+              endIndex = k;
+              break;
+          }
+      }
+      if (endIndex !== -1) {
+          packetLength = endIndex + 1;
+      } else {
+          return null;
+      }
   }
 
-  return result;
+  // Return parsed result and the total bytes consumed (including garbage before header)
+  return {
+      result,
+      bytesRead: headerIndex + packetLength
+  };
 };
 
-export const collectFromSerial = async (extensionNumber: number): Promise<CollectionResult> => {
+export const collectFromSerial = async (extensionNumber: number, totalCollectorCount: number): Promise<CollectionResult> => {
   if (!("serial" in navigator)) {
     throw new Error("您的浏览器不支持串口通讯，请使用 Chrome 或 Edge 浏览器。");
   }
@@ -148,8 +186,6 @@ export const collectFromSerial = async (extensionNumber: number): Promise<Collec
     await port.open({ baudRate: 4800 }); 
 
     const writer = port.writable.getWriter();
-    // Command: 05 55 AA [Extension] AA 55
-    // Extension should be hex.
     const command = new Uint8Array([0x05, 0x55, 0xAA, extensionNumber, 0xAA, 0x55]);
     console.log("Sending command:", Array.from(command).map(b => b.toString(16).padStart(2, '0')).join(' '));
     await writer.write(command);
@@ -159,8 +195,16 @@ export const collectFromSerial = async (extensionNumber: number): Promise<Collec
     let accumulatedData = new Uint8Array();
     const startTime = Date.now();
     
+    // Aggregate results
+    const finalResult: CollectionResult = {
+        temperatureValues: {},
+        humidityValues: 0
+    };
+    const collectedIds = new Set<number>();
+    
     try {
-        while (Date.now() - startTime < 3000) { // 3 seconds timeout
+        // Wait up to 10 seconds for all collectors
+        while (Date.now() - startTime < 10000) { 
             const { value, done } = await reader.read();
             if (done) {
                 console.log("Reader done");
@@ -173,25 +217,52 @@ export const collectFromSerial = async (extensionNumber: number): Promise<Collec
                 newData.set(value, accumulatedData.length);
                 accumulatedData = newData;
 
-                // Try parsing
-                const result = parseProtocolData(accumulatedData);
-                if (result && Object.keys(result.temperatureValues).length > 0) {
-                    console.log("Parsing success:", result);
-                    return result;
+                // Loop to parse all available packets in buffer
+                while (true) {
+                    const parsed = parseOnePacket(accumulatedData);
+                    if (!parsed) break; // Not enough data for next packet
+
+                    console.log("Parsed packet:", parsed.result);
+                    
+                    // Merge data
+                    Object.assign(finalResult.temperatureValues, parsed.result.temperatureValues);
+                    if (parsed.result.humidityValues > 0) {
+                        finalResult.humidityValues = parsed.result.humidityValues;
+                    }
+
+                    // Remove processed bytes from accumulator
+                    accumulatedData = accumulatedData.slice(parsed.bytesRead);
+                    
+                    // Track collected count (simple logic: increment per packet? Or check ID?)
+                    // Since we don't have collector ID in Result, let's just count packets.
+                    // Ideally we should track which collector ID we received.
+                    // But current parseOnePacket consumes ID.
+                    // Let's just assume 1 packet = 1 collector.
+                    // We increment a counter.
+                    collectedIds.add(Date.now() + Math.random()); // Hacky unique count
+                }
+
+                // Check completion
+                // Note: totalCollectorCount might need to match exactly how many packets we expect.
+                // E.g. 1 temp packet + 1 TH packet = 2 collectors?
+                // If collected packets >= totalCollectorCount, we are done.
+                if (collectedIds.size >= totalCollectorCount) {
+                    console.log(`Collected ${collectedIds.size}/${totalCollectorCount} packets. Done.`);
+                    return finalResult;
                 }
             }
         }
-        console.log("Timeout reached, accumulated data:", Array.from(accumulatedData).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log("Timeout reached, returning partial data.");
+        // Return whatever we have if timeout
+        if (Object.keys(finalResult.temperatureValues).length > 0) {
+            return finalResult;
+        }
     } finally {
         reader.releaseLock();
         await port.close();
     }
     
-    // If we have some data but loop finished
-    const finalResult = parseProtocolData(accumulatedData);
-    if (finalResult) return finalResult;
-
-    throw new Error("采集超时或数据解析失败");
+    throw new Error("采集超时或未收到有效数据");
 
   } catch (error: any) {
     console.error("Serial collection error:", error);

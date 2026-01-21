@@ -214,7 +214,9 @@ export default function GranariesPage() {
         // Serial
         // Pass extension number (default to 1 if not set)
         const ext = granary.config.extensionNumber || 1;
-        data = await collectFromSerial(ext);
+        // Default totalCollectorCount to 1 if not set
+        const totalCount = granary.config.totalCollectorCount || 1;
+        data = await collectFromSerial(ext, totalCount);
       } else if (granary.config.collectionDevice === 2 || granary.config.collectionDevice === 3) {
         // MQTT
         data = await collectFromMqtt({
