@@ -79,41 +79,31 @@ const parseOnePacket = (data: Uint8Array): { result: CollectionResult, bytesRead
   
   if (collectorId === 0x01) {
       // Temp packet
-      // Min length: 45 + ?
-      // Let's assume it ends with BB.
-      // Search for BB after offset 45
-      // Or just take a fixed length if we know it.
-      // Doc example: 2C ... BB.
-      // Let's try to parse if we have enough bytes.
-      // Let's assume 50 bytes for safety?
-      // Actually, if we just parse what we need (35 bytes temp + 5 comp), that's 45 bytes from header start (index 0).
-      // 0-2: Header
-      // 3: Ext
-      // 4: Col
-      // 5-39: Temp (35)
-      // 40-44: Comp (5)
-      // 45...: Padding/BB
+      // Fixed length 45 bytes as per instruction
+      const expectedLength = 46; // Header(3) + Ext(1) + Col(1) + Temp(35) + Comp(5) + BB(1) = 46.
+      // Wait, user said "Data length is 45 bytes".
+      // If user implies TOTAL packet length is 45, then BB is at 44.
+      // Let's verify: 3+1+1+35+5 = 45.
+      // If BB is extra, it's 46.
+      // If user says "45 bytes", maybe they mean the *payload* or *total*?
+      // "不应该通过BB来判断 而是通过包头2c来判断 数据长度为45个字节"
+      // "Should not judge by BB, but by header 2c. Data length is 45 bytes."
+      // Let's try to consume 45 bytes.
+      // If we consume 45, the next byte should be start of next packet (or BB if 46?).
+      // If I assume 45, and it's actually 46, I leave 1 byte (BB) in buffer.
+      // Next scan finds BB as header? No. 2C is header.
+      // So if I consume 45, and BB is at 45 (index), it remains.
+      // Then next scan starts at BB. Not 2C. Discards BB. Finds next 2C.
+      // So 45 seems safe if actual is 46.
+      // But if actual is 45 (no BB?), then 45 is correct.
+      // Let's go with 45 as requested.
       
-      if (packetStart.length < 46) {
+      if (packetStart.length < 45) {
           console.log("Packet 01 too short", packetStart.length);
-          return null; // Need at least 46 bytes to see BB at 45?
+          return null; 
       }
       
-      // Check BB at 45? Or maybe later.
-      // Let's just consume 45 bytes + scan for BB within reasonable range (e.g. up to 64 bytes)
-      let endIndex = -1;
-      for(let k=45; k<Math.min(packetStart.length, 80); k++) {
-          if (packetStart[k] === 0xBB) {
-              endIndex = k;
-              break;
-          }
-      }
-      
-      if (endIndex === -1) {
-          console.log("Packet 01 BB not found in range 45-80", Array.from(packetStart).map(b => b.toString(16).padStart(2, '0')).join(' '));
-          return null; // Packet not complete
-      }
-      packetLength = endIndex + 1;
+      packetLength = 45;
 
       const tempData = packetStart.slice(5, 40);
       const compData = packetStart.slice(40, 45);
