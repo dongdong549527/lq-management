@@ -85,7 +85,7 @@ export default function DepotDetailPage({ params }: { params: Promise<{ id: stri
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
         <p className="text-danger text-lg">{error}</p>
-        <Button onClick={() => router.back()} startContent={<ArrowLeft className="w-4 h-4" />}>
+        <Button onClick={() => router.push("/depots")} startContent={<ArrowLeft className="w-4 h-4" />}>
           返回列表
         </Button>
       </div>
@@ -101,7 +101,7 @@ export default function DepotDetailPage({ params }: { params: Promise<{ id: stri
         <Button 
           variant="light" 
           isIconOnly 
-          onClick={() => router.back()}
+          onClick={() => router.push("/depots")}
           aria-label="返回"
         >
           <ArrowLeft className="w-5 h-5" />
