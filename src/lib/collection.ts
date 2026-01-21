@@ -274,6 +274,7 @@ export const collectFromSerial = async (extensionNumber: number, totalCollectorC
                     // Let's just assume 1 packet = 1 collector.
                     // We increment a counter.
                     collectedIds.add(Date.now() + Math.random()); // Hacky unique count
+                    console.log(`Progress: ${collectedIds.size}/${totalCollectorCount} packets collected`);
                 }
 
                 // Check completion
@@ -286,7 +287,7 @@ export const collectFromSerial = async (extensionNumber: number, totalCollectorC
                 }
             }
         }
-        console.log("Timeout reached, returning partial data.");
+        console.log(`Timeout reached. Collected: ${collectedIds.size}/${totalCollectorCount}. Returning partial data.`);
         // Return whatever we have if timeout
         if (Object.keys(finalResult.temperatureValues).length > 0) {
             return finalResult;
