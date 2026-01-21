@@ -80,6 +80,16 @@ export default function GranariesPage() {
   const [formData, setFormData] = useState({
     depotId: "",
     name: "",
+    manager: "",
+    designCapacity: "",
+    actualCapacity: "",
+    storageNature: "",
+    variety: "",
+    origin: "",
+    grade: "",
+    roughRiceYield: "",
+    moisture: "",
+    remark: "",
   });
 
   // Config Modal
@@ -168,6 +178,16 @@ export default function GranariesPage() {
     setFormData({
       depotId: granary.depotId.toString(),
       name: granary.name,
+      manager: granary.info?.manager || "",
+      designCapacity: granary.info?.designCapacity?.toString() || "",
+      actualCapacity: granary.info?.actualCapacity?.toString() || "",
+      storageNature: granary.info?.storageNature || "",
+      variety: granary.info?.variety || "",
+      origin: granary.info?.origin || "",
+      grade: granary.info?.grade || "",
+      roughRiceYield: granary.info?.roughRiceYield?.toString() || "",
+      moisture: granary.info?.moisture?.toString() || "",
+      remark: granary.info?.remark || "",
     });
     onEditOpen();
   };
@@ -189,7 +209,20 @@ export default function GranariesPage() {
   };
 
   const resetForm = () => {
-    setFormData({ depotId: "", name: "" });
+    setFormData({
+      depotId: "",
+      name: "",
+      manager: "",
+      designCapacity: "",
+      actualCapacity: "",
+      storageNature: "",
+      variety: "",
+      origin: "",
+      grade: "",
+      roughRiceYield: "",
+      moisture: "",
+      remark: "",
+    });
   };
 
   const handleOpenModal = () => {
@@ -350,26 +383,98 @@ export default function GranariesPage() {
           </ModalHeader>
           <ModalBody>
             <div className="space-y-4">
-              <Select
-                label="所属粮库"
-                placeholder="请选择粮库"
-                value={formData.depotId}
-                onChange={(e) =>
-                  setFormData({ ...formData, depotId: e.target.value })
-                }
-              >
-                {depots.map((depot) => (
-                  <SelectItem key={depot.id.toString()} value={depot.id.toString()}>
-                    {depot.name}
-                  </SelectItem>
-                ))}
-              </Select>
-              <Input
-                label="仓房名称"
-                placeholder="请输入仓房名称"
-                value={formData.name}
-                onValueChange={(v) => setFormData({ ...formData, name: v })}
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <Select
+                  label="所属粮库"
+                  placeholder="请选择粮库"
+                  value={formData.depotId}
+                  onChange={(e) =>
+                    setFormData({ ...formData, depotId: e.target.value })
+                  }
+                  isDisabled={!!editingGranary && session?.user?.role !== 1}
+                >
+                  {depots.map((depot) => (
+                    <SelectItem key={depot.id.toString()} value={depot.id.toString()}>
+                      {depot.name}
+                    </SelectItem>
+                  ))}
+                </Select>
+                <Input
+                  label="仓房名称"
+                  placeholder="请输入仓房名称"
+                  value={formData.name}
+                  onValueChange={(v) => setFormData({ ...formData, name: v })}
+                />
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="font-semibold text-gray-700 mb-4">基本信息</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="保管员"
+                    placeholder="请输入保管员姓名"
+                    value={formData.manager}
+                    onValueChange={(v) => setFormData({ ...formData, manager: v })}
+                  />
+                  <Input
+                    label="储粮性质"
+                    placeholder="如：中央储备粮"
+                    value={formData.storageNature}
+                    onValueChange={(v) => setFormData({ ...formData, storageNature: v })}
+                  />
+                  <Input
+                    label="设计仓容(吨)"
+                    type="number"
+                    value={formData.designCapacity}
+                    onValueChange={(v) => setFormData({ ...formData, designCapacity: v })}
+                  />
+                  <Input
+                    label="实际储量(吨)"
+                    type="number"
+                    value={formData.actualCapacity}
+                    onValueChange={(v) => setFormData({ ...formData, actualCapacity: v })}
+                  />
+                  <Input
+                    label="品种"
+                    placeholder="如：小麦"
+                    value={formData.variety}
+                    onValueChange={(v) => setFormData({ ...formData, variety: v })}
+                  />
+                  <Input
+                    label="产地"
+                    placeholder="如：河南"
+                    value={formData.origin}
+                    onValueChange={(v) => setFormData({ ...formData, origin: v })}
+                  />
+                  <Input
+                    label="等级"
+                    placeholder="如：一等"
+                    value={formData.grade}
+                    onValueChange={(v) => setFormData({ ...formData, grade: v })}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      label="出糙率(%)"
+                      type="number"
+                      value={formData.roughRiceYield}
+                      onValueChange={(v) => setFormData({ ...formData, roughRiceYield: v })}
+                    />
+                    <Input
+                      label="水分(%)"
+                      type="number"
+                      value={formData.moisture}
+                      onValueChange={(v) => setFormData({ ...formData, moisture: v })}
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Input
+                    label="备注"
+                    value={formData.remark}
+                    onValueChange={(v) => setFormData({ ...formData, remark: v })}
+                  />
+                </div>
+              </div>
             </div>
           </ModalBody>
           <ModalFooter>

@@ -66,13 +66,62 @@ export async function PUT(
     }
 
     const resolvedParams = await params;
+    const granaryId = parseInt(resolvedParams.id);
     const body = await request.json();
-    const { name, depotId, config } = body;
+    const { 
+      name, 
+      depotId, 
+      config,
+      manager,
+      designCapacity,
+      actualCapacity,
+      storageNature,
+      variety,
+      origin,
+      grade,
+      roughRiceYield,
+      moisture,
+      remark
+    } = body;
+
+    // Check permissions
+    if (session.user.role !== 1) {
+      // 1. Check permission for current granary
+      const currentGranary = await prisma.granary.findUnique({
+        where: { id: granaryId },
+      });
+
+      if (!currentGranary) {
+        return NextResponse.json({ error: "仓房不存在" }, { status: 404 });
+      }
+
+      const hasSourcePermission = await prisma.userDepotAssociation.findUnique({
+        where: {
+          userId_depotId: {
+            userId: parseInt(session.user.id),
+            depotId: currentGranary.depotId,
+          },
+        },
+      });
+
+      if (!hasSourcePermission) {
+        return NextResponse.json({ error: "无权操作此仓房" }, { status: 403 });
+      }
+
+      // 2. Prevent depot change for non-admins
+      if (depotId && parseInt(depotId) !== currentGranary.depotId) {
+        return NextResponse.json({ error: "无权变更所属粮库" }, { status: 403 });
+      }
+    }
 
     const updateData: any = {
       name,
-      depotId: depotId ? parseInt(depotId) : undefined,
     };
+
+    // Only update depotId if provided and (admin or same depot)
+    if (depotId) {
+      updateData.depotId = parseInt(depotId);
+    }
 
     if (config) {
       updateData.config = {
@@ -109,11 +158,44 @@ export async function PUT(
       };
     }
 
+    // Handle GranaryInfo updates
+    if (manager !== undefined || designCapacity !== undefined || actualCapacity !== undefined) {
+        updateData.info = {
+            upsert: {
+                create: {
+                    manager,
+                    designCapacity: designCapacity ? parseFloat(designCapacity) : undefined,
+                    actualCapacity: actualCapacity ? parseFloat(actualCapacity) : undefined,
+                    storageNature,
+                    variety,
+                    origin,
+                    grade,
+                    roughRiceYield: roughRiceYield ? parseFloat(roughRiceYield) : undefined,
+                    moisture: moisture ? parseFloat(moisture) : undefined,
+                    remark,
+                },
+                update: {
+                    manager,
+                    designCapacity: designCapacity ? parseFloat(designCapacity) : null,
+                    actualCapacity: actualCapacity ? parseFloat(actualCapacity) : null,
+                    storageNature,
+                    variety,
+                    origin,
+                    grade,
+                    roughRiceYield: roughRiceYield ? parseFloat(roughRiceYield) : null,
+                    moisture: moisture ? parseFloat(moisture) : null,
+                    remark,
+                }
+            }
+        };
+    }
+
     const granary = await prisma.granary.update({
-      where: { id: parseInt(resolvedParams.id) },
+      where: { id: granaryId },
       data: updateData,
       include: {
         config: true,
+        info: true,
       },
     });
 
