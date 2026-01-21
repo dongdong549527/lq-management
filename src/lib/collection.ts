@@ -231,11 +231,15 @@ export const collectFromSerial = async (extensionNumber: number, totalCollectorC
         humidityValues: 0
     };
     const collectedIds = new Set<number>();
-    
-    try {
-        // Wait up to 10 seconds for all collectors
-        while (Date.now() - startTime < 10000) { 
-            const { value, done } = await reader.read();
+     
+     // Dynamic timeout based on collector count (at least 5s, or count + 5 seconds)
+     const timeoutDuration = Math.max(5000, (totalCollectorCount + 5) * 1000);
+     console.log(`Starting collection with timeout: ${timeoutDuration}ms for ${totalCollectorCount} collectors`);
+
+     try {
+         // Wait up to timeoutDuration
+         while (Date.now() - startTime < timeoutDuration) { 
+             const { value, done } = await reader.read();
             if (done) {
                 console.log("Reader done");
                 break;
