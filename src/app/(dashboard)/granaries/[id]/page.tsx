@@ -33,6 +33,7 @@ import {
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import axios from "axios";
 import Granary3DView from "@/components/Granary3DView";
+import GranaryCanvasView from "@/components/GranaryCanvasView";
 
 interface Granary {
   id: number;
@@ -85,6 +86,7 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState("7");
+  const [selectedDataId, setSelectedDataId] = useState<string>("");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -124,6 +126,9 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
 
       const dataPoints: DataPoint[] = res.data;
       setData(dataPoints);
+      if (dataPoints.length > 0) {
+          setSelectedDataId(dataPoints[0].id.toString());
+      }
 
       const formatted: ChartData[] = dataPoints.map((point) => {
         // Handle temperatureValues whether it's array (legacy) or object (new)
@@ -176,6 +181,8 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const latestData = data[0];
+  const selectedData = data.find(d => d.id.toString() === selectedDataId) || latestData;
+
   // Calculate latest average temperature logic
   let temps: number[] = [];
   if (latestData) {
@@ -311,15 +318,46 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <Card>
-        <CardHeader>
-          <p className="text-lg font-semibold">立体粮情</p>
+        <CardHeader className="flex justify-between items-center">
+          <p className="text-lg font-semibold">立体粮情 (Canvas)</p>
+          <Select 
+            aria-label="选择采集时间"
+            className="w-64" 
+            size="sm" 
+            placeholder="选择采集时间"
+            selectedKeys={selectedDataId ? [selectedDataId] : []}
+            onChange={(e) => setSelectedDataId(e.target.value)}
+          >
+              {data.map((point) => (
+                  <SelectItem key={point.id} value={point.id.toString()}>
+                      {new Date(point.collectedAt).toLocaleString()}
+                  </SelectItem>
+              ))}
+          </Select>
         </CardHeader>
         <CardBody>
           <div className="h-[500px] w-full min-w-0">
-              <Granary3DView 
-                 data={latestData?.temperatureValues || {}}
-                 config={{
-                     cableCount: granary.config?.cableCount || 0,
+             <GranaryCanvasView 
+                data={selectedData?.temperatureValues || {}}
+                config={{
+                    cableCount: granary.config?.cableCount || 0,
+                    cablePointCount: granary.config?.cablePointCount || 0
+                }}
+             />
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <p className="text-lg font-semibold">立体粮情 (Three.js)</p>
+        </CardHeader>
+        <CardBody>
+          <div className="h-[500px] w-full min-w-0">
+             <Granary3DView 
+                data={selectedData?.temperatureValues || {}}
+                config={{
+                    cableCount: granary.config?.cableCount || 0,
                     cablePointCount: granary.config?.cablePointCount || 0
                 }}
              />
