@@ -1,11 +1,14 @@
 import mqtt from "mqtt";
 
 export interface CollectionConfig {
+  granaryId?: number; // Optional, used for server-side status updates
   collectionDevice: number; // 1: Serial, 2: Network Host, 3: Network Extension
   serialPort?: string; 
   mqttTopicSub?: string;
   mqttTopicPub?: string;
-  mqttBrokerUrl?: string; 
+  mqttBrokerUrl?: string;
+  mqttUsername?: string;
+  mqttPassword?: string; 
   extensionNumber?: number;
   totalCollectorCount?: number;
   startIndex?: number;
@@ -19,14 +22,14 @@ export interface CollectionResult {
   humidityValues: null; // Deprecated but kept for compatibility if needed, or just remove
 }
 
-interface ParsedPacket {
+export interface ParsedPacket {
   result: CollectionResult;
   bytesRead: number;
   collectorId: number;
 }
 
 // Helper to parse one packet from buffer
-const parseOnePacket = (data: Uint8Array, config: CollectionConfig): ParsedPacket | null => {
+export const parseOnePacket = (data: Uint8Array, config: CollectionConfig): ParsedPacket | null => {
   if (data.length < 5) return null;
 
   // Search for header 2C 5A A5
@@ -286,10 +289,27 @@ export const collectFromMqtt = async (
         connectTimeout: 30 * 1000,
     });
 
+    const totalCollectorCount = config.totalCollectorCount || 1;
+    // Timeout slightly longer than Serial because of network latency
+    const timeoutDuration = Math.max(10000, (totalCollectorCount + 5) * 1000); 
+    
+    let accumulatedData = new Uint8Array();
+    const finalResult: CollectionResult = {
+        temperatureValues: {},
+        humidityValues: null
+    };
+    const collectedIds = new Set<number>();
+
     const timeout = setTimeout(() => {
       client.end();
-      reject(new Error("采集超时"));
-    }, 10000);
+      // If we have some data, return it
+      if (Object.keys(finalResult.temperatureValues).length > 0) {
+          console.log(`MQTT Timeout reached. Returning partial data.`);
+          resolve(finalResult);
+      } else {
+          reject(new Error("采集超时"));
+      }
+    }, timeoutDuration);
 
     client.on("connect", () => {
       console.log("MQTT Connected");
@@ -299,8 +319,23 @@ export const collectFromMqtt = async (
           client.end();
           reject(new Error("订阅主题失败"));
         } else {
-          // Send collection command
-          const command = JSON.stringify({ action: "collect" });
+          console.log(`Subscribed to ${config.mqttTopicSub}. Sending command...`);
+          
+          let command: string | Buffer;
+          
+          if (config.collectionDevice === 2 || config.collectionDevice === 3) {
+             // Network Host / Extension: Send Binary Command
+             const extensionNumber = config.extensionNumber || 1;
+             const cmdBytes = new Uint8Array([0x05, 0x55, 0xAA, extensionNumber, 0xAA, 0x55]);
+             // mqtt.js supports Buffer or Uint8Array
+             command = Buffer.from(cmdBytes);
+             console.log("Sending Binary Command:", Array.from(cmdBytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
+          } else {
+             // Default / Legacy JSON command
+             command = JSON.stringify({ action: "collect" });
+             console.log("Sending JSON Command:", command);
+          }
+          
           client.publish(config.mqttTopicPub!, command);
         }
       });
@@ -308,14 +343,39 @@ export const collectFromMqtt = async (
 
     client.on("message", (topic, message) => {
       if (topic === config.mqttTopicSub) {
-        clearTimeout(timeout);
-        client.end();
-        try {
-          const data = message.toString();
-          const result = parseData(data);
-          resolve(result);
-        } catch (e) {
-          reject(new Error("数据解析失败"));
+        // message is Buffer
+        console.log("MQTT Received chunk:", message.length, "bytes");
+        
+        // Convert Buffer to Uint8Array
+        const value = new Uint8Array(message);
+        const newData = new Uint8Array(accumulatedData.length + value.length);
+        newData.set(accumulatedData);
+        newData.set(value, accumulatedData.length);
+        accumulatedData = newData;
+
+        while (true) {
+            const parsed = parseOnePacket(accumulatedData, config);
+            if (!parsed) break; 
+
+            if (parsed.bytesRead > 0 && parsed.collectorId > 0) {
+                const hasData = Object.keys(parsed.result.temperatureValues).length > 0;
+                
+                if (hasData) {
+                    console.log(`MQTT Parsed packet from Collector ${parsed.collectorId}`);
+                    Object.assign(finalResult.temperatureValues, parsed.result.temperatureValues);
+                    collectedIds.add(parsed.collectorId);
+                    console.log(`MQTT Progress: ${collectedIds.size}/${totalCollectorCount} collectors`);
+                }
+            }
+
+            accumulatedData = accumulatedData.slice(parsed.bytesRead);
+        }
+
+        if (collectedIds.size >= totalCollectorCount) {
+            console.log(`MQTT Collected ${collectedIds.size}/${totalCollectorCount} packets. Done.`);
+            clearTimeout(timeout);
+            client.end();
+            resolve(finalResult);
         }
       }
     });

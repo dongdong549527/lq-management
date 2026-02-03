@@ -32,7 +32,9 @@ import {
 import { Plus, Search, MoreVertical, Edit, Trash2, BarChart2, Settings, Play } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
-import { collectFromSerial, collectFromMqtt } from "@/lib/collection";
+import { collectFromSerial } from "@/lib/collection";
+import { collectFromMqttAction } from "@/app/actions/mqtt";
+import { updateGranaryStatus } from "@/app/actions/granary";
 
 interface Granary {
   id: number;
@@ -115,7 +117,35 @@ export default function GranariesPage() {
 
   useEffect(() => {
     fetchGranaries();
+    
+    // Polling for status updates every 5 seconds
+    const interval = setInterval(() => {
+        // Only fetch if we are not actively collecting locally (to avoid overwriting local optimistic updates)
+        // But actually, we want to see other people's updates.
+        // We can just re-fetch.
+        fetchGranaries(true);
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [page, search, depotFilter]);
+
+  useEffect(() => {
+    // Prevent page unload (refresh/close) if collecting
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        // Check if any granary is locally known to be collecting (via polling or local action)
+        // OR if we have a local collectingId set
+        const isCollecting = collectingId !== null || granaries.some(g => g.collectionStatus === 2);
+        
+        if (isCollecting) {
+            e.preventDefault();
+            e.returnValue = ''; // Chrome requires this to be set
+            return '';
+        }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [collectingId, granaries]);
 
   const fetchDepots = async () => {
     try {
@@ -126,8 +156,8 @@ export default function GranariesPage() {
     }
   };
 
-  const fetchGranaries = async () => {
-    setLoading(true);
+  const fetchGranaries = async (isPolling = false) => {
+    if (!isPolling) setLoading(true);
     try {
       const params: any = { page, limit: 10 };
       if (search) params.search = search;
@@ -138,7 +168,7 @@ export default function GranariesPage() {
     } catch (error) {
       console.error("Failed to fetch granaries:", error);
     } finally {
-      setLoading(false);
+      if (!isPolling) setLoading(false);
     }
   };
 
@@ -216,15 +246,32 @@ export default function GranariesPage() {
       let data;
       if (granary.config.collectionDevice === 1) {
         // Serial
-        data = await collectFromSerial({
-          ...granary.config,
-          collectionDevice: 1,
-        });
+        // 1. Lock: Set status to Collecting (2)
+        await updateGranaryStatus(granary.id, 2);
+        // Refresh local state to reflect change immediately (optional, but good for UX if re-render happens)
+        setGranaries(prev => prev.map(g => g.id === granary.id ? { ...g, collectionStatus: 2 } : g));
+
+        try {
+            data = await collectFromSerial({
+            ...granary.config,
+            collectionDevice: 1,
+            });
+        } catch (err) {
+            // If serial fails, reset status to 0
+            await updateGranaryStatus(granary.id, 0);
+            setGranaries(prev => prev.map(g => g.id === granary.id ? { ...g, collectionStatus: 0 } : g));
+            throw err;
+        }
       } else if (granary.config.collectionDevice === 2 || granary.config.collectionDevice === 3) {
-        // MQTT
-        data = await collectFromMqtt({
+        // MQTT (Server Action)
+        data = await collectFromMqttAction({
           ...granary.config,
+          granaryId: granary.id, // Pass ID for status update
           collectionDevice: granary.config.collectionDevice,
+          // Use hardcoded defaults if not in config, or let the action handle it
+          mqttBrokerUrl: "mqtt://claw.540777.xyz:1883",
+          mqttUsername: "admin",
+          mqttPassword: "admin"
         });
       } else {
         toast.error("未知的设备类型");
@@ -239,11 +286,11 @@ export default function GranariesPage() {
         sequenceNumber: 1,
       });
 
-      toast.success("采集成功！");
+      toast.success(`${granary.name} 采集成功！`);
       fetchGranaries();
     } catch (error: any) {
       console.error(error);
-      toast.error(error.message || "采集失败");
+      toast.error(`${granary.name} 采集失败: ${error.message || "未知错误"}`);
     } finally {
       setCollectingId(null);
     }
@@ -355,9 +402,15 @@ export default function GranariesPage() {
                     <TableCell>
                       <Chip
                         size="sm"
-                        color={granary.collectionStatus === 1 ? "success" : "warning"}
+                        color={
+                            granary.collectionStatus === 1 ? "success" : 
+                            granary.collectionStatus === 2 ? "primary" : "warning"
+                        }
                       >
-                        {granary.collectionStatus === 1 ? "已采集" : "待采集"}
+                        {
+                            granary.collectionStatus === 1 ? "已采集" : 
+                            granary.collectionStatus === 2 ? "采集中" : "待采集"
+                        }
                       </Chip>
                     </TableCell>
                     <TableCell>
@@ -373,10 +426,11 @@ export default function GranariesPage() {
                           variant="light"
                           color="primary"
                           title="开始采集"
-                          isLoading={collectingId === granary.id}
+                          isLoading={collectingId === granary.id || granary.collectionStatus === 2}
+                          isDisabled={granary.collectionStatus === 2}
                           onClick={() => handleCollect(granary)}
                         >
-                          {!collectingId && <Play className="w-4 h-4" />}
+                          {(!collectingId && granary.collectionStatus !== 2) && <Play className="w-4 h-4" />}
                         </Button>
                         <Button
                           isIconOnly

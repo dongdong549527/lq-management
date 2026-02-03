@@ -341,7 +341,8 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
                 data={selectedData?.temperatureValues || {}}
                 config={{
                     cableCount: granary.config?.cableCount || 0,
-                    cablePointCount: granary.config?.cablePointCount || 0
+                    cablePointCount: granary.config?.cablePointCount || 0,
+                    totalCollectorCount: granary.config?.totalCollectorCount || 0 // Pass this
                 }}
              />
           </div>
@@ -358,7 +359,8 @@ export default function GranaryDetailPage({ params }: { params: Promise<{ id: st
                 data={selectedData?.temperatureValues || {}}
                 config={{
                     cableCount: granary.config?.cableCount || 0,
-                    cablePointCount: granary.config?.cablePointCount || 0
+                    cablePointCount: granary.config?.cablePointCount || 0,
+                    totalCollectorCount: granary.config?.totalCollectorCount || 0 // Pass this
                 }}
              />
           </div>

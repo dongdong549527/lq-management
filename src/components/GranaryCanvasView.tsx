@@ -6,45 +6,61 @@ interface GranaryCanvasViewProps {
   config: {
     cableCount: number;
     cablePointCount: number;
-    startIndex?: number;
-    endIndex?: number;
+    startIndex?: number; // Add start index
+    endIndex?: number;   // Add end index
+    length?: number;
+    width?: number;
+    height?: number;
+    totalCollectorCount?: number;
   };
   data: { [key: string]: number };
 }
 
 export default function GranaryCanvasView({ config, data }: GranaryCanvasViewProps) {
+  const { cableCount, cablePointCount } = config;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<{ type: 'layer' | 'row' | 'col' | 'all', value: number } | null>(null);
 
-  // 1. Data Parsing (Reuse logic)
+  // 解析数据并确定布局
   const layout = useMemo(() => {
-    if (!data) return { cols: 1, rows: 1, layers: 1, map: new Map() };
-    
-    const keys = Object.keys(data).filter(k => k !== 'Indoor' && k !== 'Outdoor');
-    const parsed = keys.map(k => {
-        const parts = k.split('-').map(Number);
-        if (parts.length === 3) {
-            return { c: parts[0], l: parts[1], p: parts[2], val: data[k] };
-        }
-        return null;
-    }).filter(Boolean) as { c: number, l: number, p: number, val: number }[];
-    
-    if (parsed.length === 0) return { cols: 1, rows: 1, layers: 1, map: new Map() };
-    
-    const maxC = Math.max(...parsed.map(i => i.c));
-    const maxL = Math.max(...parsed.map(i => i.l));
-    const maxP = Math.max(...parsed.map(i => i.p));
-    
+    // 自动探测数据范围
+    let dCols = 1, dRows = 1, dLayers = 1;
     const map = new Map();
-    parsed.forEach(item => {
-        map.set(`${item.c}-${item.l}-${item.p}`, item.val);
-    });
-    
-    return { cols: maxC, rows: maxL, layers: maxP, map };
-  }, [data]);
 
-  const { cols, rows, layers, map } = layout;
+    if (data) {
+        const keys = Object.keys(data).filter(k => k !== 'Indoor' && k !== 'Outdoor');
+        const parsed = keys.map(k => {
+            const parts = k.split('-').map(Number);
+            if (parts.length === 3) {
+                return { c: parts[0], l: parts[1], p: parts[2], val: data[k] };
+            }
+            return null;
+        }).filter(Boolean) as { c: number, l: number, p: number, val: number }[];
+        
+        parsed.forEach(item => {
+            map.set(`${item.c}-${item.l}-${item.p}`, item.val);
+        });
+        
+        if (parsed.length > 0) {
+            dCols = Math.max(...parsed.map(i => i.c));
+            dRows = Math.max(...parsed.map(i => i.l));
+            dLayers = Math.max(...parsed.map(i => i.p));
+        }
+    }
+    
+    // 优先使用配置中的参数
+    const startIdx = config.startIndex || 1;
+    const endIdx = config.endIndex || dCols;
+    const cols = (endIdx - startIdx + 1) || dCols; 
+    
+    const rows = config.cableCount || dRows;          // 行
+    const layers = config.cablePointCount || dLayers; // 层
+
+    return { cols, rows, layers, map, startIdx };
+  }, [data, config]); // 依赖 config
+
+  const { cols, rows, layers, map, startIdx } = layout;
 
   // Set default filter to bottom layer
   useEffect(() => {
@@ -60,45 +76,106 @@ export default function GranaryCanvasView({ config, data }: GranaryCanvasViewPro
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Responsive Canvas Size
-    const container = containerRef.current;
-    if (container) {
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
-    }
+    // Responsive Canvas Size Handling
+    // We need to listen to resize events or use ResizeObserver to keep canvas buffer size in sync with display size.
+    // However, since this component re-renders when parent changes (usually), 
+    // simply checking clientWidth/Height here is often enough for initial render.
+    // For robust resizing, we can add a ResizeObserver.
     
-    const W = canvas.width;
-    const H = canvas.height;
+    const resizeCanvas = () => {
+        const container = containerRef.current;
+        if (container) {
+            // Set actual canvas buffer size to match display size
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            
+            // Trigger redraw by forcing update or just calling draw()
+            // Since we are inside useEffect [width, height], modifying width/height might not trigger it unless we store them in state.
+            // Let's store W/H in state to trigger re-calculation of geometry.
+            setCanvasSize({ width: container.clientWidth, height: container.clientHeight });
+        }
+    };
+
+    // Initial resize
+    resizeCanvas();
+
+    // Add listener
+    window.addEventListener('resize', resizeCanvas);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', resizeCanvas);
+  }, []);
+
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+  // Actual Drawing Effect
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || canvasSize.width === 0) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    
+    const W = canvasSize.width;
+    const H = canvasSize.height;
     
     // Clear
     ctx.clearRect(0, 0, W, H);
 
     // --- Configuration ---
     // Perspective parameters (Oblique projection)
-    // Origin: Bottom-Left of the front face
-    const margin = 60;
-    const frontW = W * 0.55; // Narrower front to allow depth
-    const frontH = H * 0.45; // Shorter to allow depth
-    const startX = (W - frontW) / 2 + 10; // Shift right to give space for left labels
-    const startY = H - margin - 60; // Shift up to give space for bottom labels
+    // To prevent deformation, we should base our units on the smaller dimension (Min(W, H))
+    // rather than scaling X and Y independently.
     
-    // Z-axis projection vector (going top-right)
-    const zDepth = 200; // More depth to separate rows
-    const zAngle = -Math.PI / 4.5; // Steep angle (approx -40 deg) to separate rows visually
-    const zVecX = Math.cos(zAngle) * zDepth; // Positive X
-    const zVecY = Math.sin(zAngle) * zDepth; // Negative Y (Up)
+    const scaleFactor = Math.min(W, H) / 500; // Base scale on 500px ref size
+    
+    const margin = 60 * scaleFactor;
+    // Keep aspect ratio of the front face consistent
+    // Let's say front face should take up ~60% of width and ~50% of height max
+    const frontW = Math.min(W * 0.6, H * 0.6); 
+    const frontH = frontW * 0.8; // Fixed aspect ratio for front face (width/height)
+    
+    // Center it horizontally
+    const startX = (W - frontW) / 2 + (20 * scaleFactor); 
+    // Position vertically
+    const startY = H - margin - (40 * scaleFactor);
+    
+    // Z-axis projection vector
+    const zDepth = 200 * scaleFactor; 
+    const zAngle = -Math.PI / 4.5; 
+    const zVecX = Math.cos(zAngle) * zDepth; 
+    const zVecY = Math.sin(zAngle) * zDepth; 
+
+    // ... Rest of drawing logic uses these calculated variables ...
 
     // Helper: Project 3D (col, layer, row) to 2D (x, y)
     // col: 1..cols (X), layer: 1..layers (Y), row: 1..rows (Z)
     const project = (c: number, p: number, l: number) => {
         // Normalize 0..1
         const nX = (c - 1) / Math.max(cols - 1, 1);
-        const nY = (p - 1) / Math.max(layers - 1, 1); // p=1 is top, p=layers is bottom
+        
+        // Y depends on p
+        // User Req: "Layer 1 at Bottom"
+        // Canvas coords: 0 is Top, Max is Bottom.
+        // We want p=1 to be at Max Y (Bottom).
+        // We want p=layers to be at Min Y (Top).
+        // If p=1 -> nY should be 0 (for bottom).
+        // Wait, baseY = startY - nY * frontH.
+        // startY is bottom of front face.
+        // If we want p=1 at bottom, then nY should be 0.
+        // (p - 1) / max -> 0/max = 0. Correct.
+        // If p=layers -> nY = 1.
+        // baseY = startY - 1 * frontH = Top. Correct.
+        const nY = (p - 1) / Math.max(layers - 1, 1);
+
+        // Z depends on l
+        // User Req: "Row 1 at Front"
+        // In oblique: l=1 -> z=0 (Front). l=rows -> z=Max (Back).
+        // nZ = (l-1)/max -> 0 for l=1. Correct.
         const nZ = (l - 1) / Math.max(rows - 1, 1);
         
         // Base Front Face
         const baseX = startX + nX * frontW;
-        const baseY = startY - (1 - nY) * frontH; // Y grows down in Canvas, so subtract height
+        const baseY = startY - nY * frontH;
         
         // Add Z offset
         const x = baseX + nZ * zVecX;
@@ -193,13 +270,14 @@ export default function GranaryCanvasView({ config, data }: GranaryCanvasViewPro
         // Sort points by depth (Z) then Y so they overlap correctly?
         // Actually in oblique, Back points are drawn first.
         // Loop Z from rows down to 1? Or 1 to rows?
-        // Back is rows. Front is 1.
+        // Back is rows (l=rows, nZ=1, z=Max). Front is 1 (l=1, nZ=0, z=0).
         // We should draw Back (rows) first, then Front (1).
         
         const pointsToDraw = [];
         
-        for (let l = rows; l >= 1; l--) { // Draw back to front (Painter's algorithm)
-            for (let c = 1; c <= cols; c++) {
+        for (let l = rows; l >= 1; l--) { // Draw back to front
+            for (let i = 0; i < cols; i++) {
+                 const c = startIdx + i;
                  for (let p = 1; p <= layers; p++) {
                     const val = map.get(`${c}-${l}-${p}`);
                     
@@ -212,7 +290,7 @@ export default function GranaryCanvasView({ config, data }: GranaryCanvasViewPro
                     }
                     
                     if (visible) {
-                        const pos = project(c, p, l);
+                        const pos = project(i + 1, p, l);
                         pointsToDraw.push({ x: pos.x, y: pos.y, val, key: `${c}-${l}-${p}` });
                     }
                  }
@@ -242,7 +320,7 @@ export default function GranaryCanvasView({ config, data }: GranaryCanvasViewPro
     
     drawData();
 
-  }, [cols, rows, layers, map, filter]);
+  }, [cols, rows, layers, map, filter, startIdx]);
 
   // 3. HTML Labels (Overlay)
   // We need to calculate positions for labels too.
@@ -271,16 +349,17 @@ export default function GranaryCanvasView({ config, data }: GranaryCanvasViewPro
     const W = container.clientWidth;
     const H = container.clientHeight;
     
-    const margin = 60;
-    const frontW = W * 0.55;
-    const frontH = H * 0.45;
-    const startX = (W - frontW) / 2 + 40;
-    const startY = H - margin - 60;
-    
-    const zDepth = 200;
-    const zAngle = -Math.PI / 4.5;
-    const zVecX = Math.cos(zAngle) * zDepth;
-    const zVecY = Math.sin(zAngle) * zDepth;
+    // Use EXACTLY the same logic as draw loop to ensure alignment
+    const scaleFactor = Math.min(W, H) / 500;
+    const margin = 60 * scaleFactor;
+    const frontW = Math.min(W * 0.6, H * 0.6); 
+    const frontH = frontW * 0.8; 
+    const startX = (W - frontW) / 2 + (20 * scaleFactor); 
+    const startY = H - margin - (40 * scaleFactor);
+    const zDepth = 200 * scaleFactor; 
+    const zAngle = -Math.PI / 4.5; 
+    const zVecX = Math.cos(zAngle) * zDepth; 
+    const zVecY = Math.sin(zAngle) * zDepth; 
 
     const project = (c: number, p: number, l: number) => {
         const nX = (c - 1) / Math.max(cols - 1, 1);
@@ -288,7 +367,7 @@ export default function GranaryCanvasView({ config, data }: GranaryCanvasViewPro
         const nZ = (l - 1) / Math.max(rows - 1, 1);
         
         const baseX = startX + nX * frontW;
-        const baseY = startY - (1 - nY) * frontH;
+        const baseY = startY - nY * frontH;
         
         const x = baseX + nZ * zVecX;
         const y = baseY + nZ * zVecY;
@@ -298,26 +377,27 @@ export default function GranaryCanvasView({ config, data }: GranaryCanvasViewPro
     const newLabels = [];
 
     // Col Labels (Bottom Front Edge)
-    for(let c=1; c<=cols; c++) {
-        const pos = project(c, layers, 1); // Bottom, Front row
-        newLabels.push({ type: 'col', id: c, x: pos.x, y: pos.y + 20 });
+    for(let i=0; i<cols; i++) {
+        const c = startIdx + i;
+        const pos = project(i + 1, 1, 1); // Bottom (p=1), Front row (l=1)
+        newLabels.push({ type: 'col', id: c, x: pos.x, y: pos.y + (20 * scaleFactor) });
     }
     
     // Row Labels (Left Top Edge going deep)
     for(let r=1; r<=rows; r++) {
-        const pos = project(1, 1, r); // Top, Left col
-        newLabels.push({ type: 'row', id: r, x: pos.x - 30, y: pos.y - 10 });
+        const pos = project(1, layers, r); // Top (p=layers), Left col
+        newLabels.push({ type: 'row', id: r, x: pos.x - (30 * scaleFactor), y: pos.y - (10 * scaleFactor) });
     }
     
     // Layer Labels (Front Left Edge)
     for(let p=1; p<=layers; p++) {
         const pos = project(1, p, 1); // Left col, Front row
-        newLabels.push({ type: 'layer', id: p, x: pos.x - 30, y: pos.y });
+        newLabels.push({ type: 'layer', id: p, x: pos.x - (30 * scaleFactor), y: pos.y });
     }
     
     setLabelPositions(newLabels);
 
-  }, [cols, rows, layers]); // Recalc on dimension change (window resize not handled for simplicity)
+  }, [cols, rows, layers, startIdx, canvasSize]); // Recalc on dimension change (window resize not handled for simplicity)
 
   return (
     <div ref={containerRef} className="w-full h-[500px] bg-white rounded-xl border border-gray-200 relative overflow-hidden">

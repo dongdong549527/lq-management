@@ -10,6 +10,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "未登录" }, { status: 401 });
     }
 
+    // Auto-reset stuck collections:
+    // If status is 2 (Collecting) and last update was > 2 minutes ago, reset to 0 (Pending).
+    // This handles cases where client crashed or refreshed during collection.
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+    await prisma.granary.updateMany({
+        where: {
+            collectionStatus: 2,
+            updatedAt: {
+                lt: twoMinutesAgo
+            }
+        },
+        data: {
+            collectionStatus: 0 // Reset to pending
+        }
+    });
+
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
