@@ -12,7 +12,7 @@ import {
   Divider,
   Link,
 } from "@heroui/react";
-import { Mail, Lock, User, Phone, FullName } from "lucide-react";
+import { Mail, Lock, User, Phone, User2 } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();

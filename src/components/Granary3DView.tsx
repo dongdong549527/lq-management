@@ -7,6 +7,7 @@ import { Maximize, Minimize } from "lucide-react";
 import * as THREE from "three";
 
 interface Granary3DViewProps {
+  name?: string; // Add name prop
   config: {
     cableCount: number;
     cablePointCount: number;
@@ -23,13 +24,13 @@ interface Granary3DViewProps {
 // 根据温度值返回对应的颜色字符串
 function getColor(value?: number) {
   if (value === undefined) return "gray";
-  if (value < 5) return "#60a5fa";  // blue-400
-  if (value < 10) return "#3b82f6"; // blue-500
-  if (value < 15) return "#22c55e"; // green-500
-  if (value < 20) return "#84cc16"; // lime-500
-  if (value < 25) return "#eab308"; // yellow-500
-  if (value < 30) return "#f59e0b"; // amber-500
-  if (value < 35) return "#f97316"; // orange-500
+  if (value < 0) return "#60a5fa";  // blue-400
+  if (value < 5) return "#3b82f6"; // blue-500
+  if (value < 10) return "#22c55e"; // green-500
+  if (value < 15) return "#84cc16"; // lime-500
+  if (value < 20) return "#eab308"; // yellow-500
+  if (value < 25) return "#f59e0b"; // amber-500
+  if (value < 30) return "#f97316"; // orange-500
   return "#ef4444"; // red-500
 }
 
@@ -78,7 +79,7 @@ function SensorValue({ position, value }: { position: [number, number, number]; 
     )
 }
 
-export default function Granary3DView({ config, data }: Granary3DViewProps) {
+export default function Granary3DView({ config, data, name }: Granary3DViewProps) {
   const { cableCount, cablePointCount, startIndex, endIndex, length, width: configWidth, height: configHeight } = config;
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -291,6 +292,23 @@ export default function Granary3DView({ config, data }: Granary3DViewProps) {
         <ambientLight intensity={0.8} />
         <pointLight position={[10, 10, 10]} intensity={1} />
         <OrbitControls makeDefault />
+
+        {/* 仓房名称 */}
+        {name && (
+            <Billboard position={[0, height/2 + 3, 0]}>
+                <Text
+                    fontSize={1.0}
+                    color="black"
+                    anchorX="center"
+                    anchorY="middle"
+                    outlineWidth={0.05}
+                    outlineColor="white"
+                    fontWeight="bold"
+                >
+                    {name}
+                </Text>
+            </Billboard>
+        )}
 
         <group>
             {/* 地板 */}

@@ -63,7 +63,7 @@ export async function DELETE(
     const userId = parseInt(resolvedParams.id);
 
     // Prevent deleting self
-    if (session.user.id === userId) {
+    if (session.user.id === userId.toString()) {
       return NextResponse.json(
         { error: "不能删除自己" },
         { status: 400 }

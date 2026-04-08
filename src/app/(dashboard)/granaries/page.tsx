@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { collectFromSerial } from "@/lib/collection";
 import { collectFromMqttAction } from "@/app/actions/mqtt";
 import { updateGranaryStatus } from "@/app/actions/granary";
+import { mqttConfig } from "@/lib/config";
 
 interface Granary {
   id: number;
@@ -268,10 +269,10 @@ export default function GranariesPage() {
           ...granary.config,
           granaryId: granary.id, // Pass ID for status update
           collectionDevice: granary.config.collectionDevice,
-          // Use hardcoded defaults if not in config, or let the action handle it
-          mqttBrokerUrl: "mqtt://claw.540777.xyz:1883",
-          mqttUsername: "admin",
-          mqttPassword: "admin"
+          // Use config from environment variables
+          mqttBrokerUrl: mqttConfig.brokerUrl,
+          mqttUsername: mqttConfig.username,
+          mqttPassword: mqttConfig.password
         });
       } else {
         toast.error("未知的设备类型");
@@ -364,7 +365,7 @@ export default function GranariesPage() {
               className="max-w-xs"
             >
               {depots.map((depot) => (
-                <SelectItem key={depot.id.toString()} value={depot.id.toString()}>
+                <SelectItem key={depot.id.toString()}>
                   {depot.name}
                 </SelectItem>
               ))}
@@ -455,7 +456,7 @@ export default function GranariesPage() {
                             >
                               编辑信息
                             </DropdownItem>
-                            {session?.user?.role === 1 && (
+                            {session?.user?.role === 1 ? (
                               <DropdownItem
                                 key="config"
                                 startContent={<Settings className="w-4 h-4" />}
@@ -463,7 +464,7 @@ export default function GranariesPage() {
                               >
                                 参数配置
                               </DropdownItem>
-                            )}
+                            ) : null}
                             <DropdownItem
                               key="delete"
                               color="danger"
@@ -513,7 +514,7 @@ export default function GranariesPage() {
                   isDisabled={!!editingGranary && session?.user?.role !== 1}
                 >
                   {depots.map((depot) => (
-                    <SelectItem key={depot.id.toString()} value={depot.id.toString()}>
+                    <SelectItem key={depot.id.toString()}>
                       {depot.name}
                     </SelectItem>
                   ))}
@@ -644,9 +645,9 @@ export default function GranariesPage() {
                   selectedKeys={configData.collectionDevice ? [configData.collectionDevice.toString()] : []}
                   onChange={(e) => setConfigData({ ...configData, collectionDevice: e.target.value ? parseInt(e.target.value) : undefined })}
                 >
-                  <SelectItem key="1" value="1">串口主机</SelectItem>
-                  <SelectItem key="2" value="2">网络主机</SelectItem>
-                  <SelectItem key="3" value="3">网络分机</SelectItem>
+                  <SelectItem key="1">串口主机</SelectItem>
+                  <SelectItem key="2">网络主机</SelectItem>
+                  <SelectItem key="3">网络分机</SelectItem>
                 </Select>
                 {configData.collectionDevice === 1 && (
                   <Input

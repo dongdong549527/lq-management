@@ -246,7 +246,7 @@ export default function UsersPage() {
               onChange={(e) => setDepotFilter(e.target.value)}
             >
               {depots.map((depot) => (
-                <SelectItem key={depot.id.toString()} value={depot.id.toString()}>
+                <SelectItem key={depot.id.toString()}>
                   {depot.name}
                 </SelectItem>
               ))}
@@ -412,16 +412,16 @@ export default function UsersPage() {
                     selectedKeys={[formData.role]}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   >
-                    <SelectItem key="0" value="0">普通用户</SelectItem>
-                    <SelectItem key="1" value="1">管理员</SelectItem>
+                    <SelectItem key="0">普通用户</SelectItem>
+                    <SelectItem key="1">管理员</SelectItem>
                   </Select>
                   <Select
                     label="状态"
                     selectedKeys={[formData.isActive]}
                     onChange={(e) => setFormData({ ...formData, isActive: e.target.value })}
                   >
-                    <SelectItem key="true" value="true">启用</SelectItem>
-                    <SelectItem key="false" value="false">禁用</SelectItem>
+                    <SelectItem key="true">启用</SelectItem>
+                    <SelectItem key="false">禁用</SelectItem>
                   </Select>
                 </div>
               </div>

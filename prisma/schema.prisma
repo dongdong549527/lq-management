@@ -143,11 +143,11 @@ model GranaryData {
   /// 采集时间
   collectedAt       DateTime    @default(now())
   /// 采集序号
-  // sequenceNumber    Int?
+  sequenceNumber    Int?
   /// 温度数据(JSON)
   temperatureValues Json?
   /// 湿度数据
-  // humidityValues    Json?
+  humidityValues    Json?
   /// 创建时间
   createdAt         DateTime    @default(now())
 
